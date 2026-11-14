@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useFleet } from '../context/FleetContext';
 import { getVehicleImage, WORK_ORDER_STAGES } from '../data/fleetData';
-import { getPmsDetails } from '../utils/formatters';
 import {
   Plus,
   Wrench,
@@ -15,33 +14,6 @@ const COMPLETED = 'Completed / Released';
 const shortPerson = (str) => {
   if (!str) return 'Motorpool Specialist';
   return str.split(' (')[0].trim();
-};
-
-const evaluateDiagnostic = (diag, currentOdo = 0) => {
-  const mode = diag.trackMode || 'BOTH';
-  const targetKm = Number(diag.targetKm) || 0;
-  const remainingKm = targetKm > 0 ? targetKm - currentOdo : null;
-
-  let remainingDays = null;
-  if (diag.targetDate) {
-    const today = new Date();
-    const target = new Date(diag.targetDate);
-    if (!isNaN(target)) {
-      remainingDays = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
-    }
-  }
-
-  let status = 'HEALTHY';
-  if (mode === 'KM' || mode === 'BOTH') {
-    if (remainingKm !== null && remainingKm <= 0) status = 'OVERDUE';
-    else if (remainingKm !== null && remainingKm <= 1200 && status !== 'OVERDUE') status = 'DUE_SOON';
-  }
-  if (mode === 'DATE' || mode === 'BOTH') {
-    if (remainingDays !== null && remainingDays < 0) status = 'OVERDUE';
-    else if (remainingDays !== null && remainingDays <= 21 && status !== 'OVERDUE') status = 'DUE_SOON';
-  }
-
-  return { remainingKm, remainingDays, status };
 };
 
 export const MaintenanceHub = () => {
@@ -61,10 +33,9 @@ export const MaintenanceHub = () => {
 
   const q = (globalSearch || '').toLowerCase().trim();
 
-  // 1. Vehicles Needing / Undergoing Maintenance
+  // 1. Vehicles Needing / Undergoing Maintenance (only vehicles explicitly sent from Ongoing Health or added)
   const needsMaintenanceItems = useMemo(() => {
     const activeWOs = workOrders.filter(wo => wo.status !== COMPLETED);
-    const activeVehCodes = new Set(activeWOs.map(w => w.vehicleCode));
     const items = [];
 
     activeWOs.forEach(wo => {
@@ -88,39 +59,6 @@ export const MaintenanceHub = () => {
         wo,
         vehicle: v,
         stage: wo.currentStage || 'Active Repair / Servicing'
-      });
-    });
-
-    vehicles.forEach(v => {
-      if (activeVehCodes.has(v.code)) return;
-      if (branchFilter !== 'ALL' && v.branchId !== branchFilter) return;
-
-      const pms = getPmsDetails(v);
-      const diags = v.diagnostics || [];
-      const dueDiag = diags.find(d => {
-        const ev = evaluateDiagnostic(d, v.odometerKm);
-        return ev.status === 'OVERDUE' || ev.status === 'DUE_SOON';
-      });
-
-      const isDue = pms.compliance === 'OVERDUE' || pms.compliance === 'DUE_SOON' || Boolean(dueDiag);
-      if (!isDue) return;
-
-      if (q) {
-        const match =
-          v.code.toLowerCase().includes(q) ||
-          v.plateNo.toLowerCase().includes(q) ||
-          v.makeModel.toLowerCase().includes(q) ||
-          (dueDiag?.type || pms.milestone || '').toLowerCase().includes(q);
-        if (!match) return;
-      }
-
-      items.push({
-        kind: 'DUE_VEHICLE',
-        id: `DUE-${v.id}`,
-        vehicle: v,
-        dueDiag,
-        pms,
-        stage: 'Due for Service'
       });
     });
 
@@ -270,14 +208,14 @@ export const MaintenanceHub = () => {
               No maintenance records in this view
             </div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
-              Click <strong>+ Add Car to Maintenance</strong> to schedule servicing.
+              Send a vehicle from <strong>Ongoing Health</strong> or click <strong>+ Add Car to Maintenance</strong>.
             </div>
           </div>
         ) : (
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
               gap: '1rem'
             }}
           >
@@ -384,6 +322,20 @@ export const MaintenanceHub = () => {
                           </span>
                         </div>
                       </div>
+
+                      {wo.description && (
+                        <div style={{
+                          fontSize: '0.75rem',
+                          color: 'var(--text-secondary)',
+                          background: 'var(--bg-surface-subtle)',
+                          border: '1px solid var(--border-light)',
+                          borderRadius: '6px',
+                          padding: '0.4rem 0.65rem',
+                          marginBottom: '0.85rem'
+                        }}>
+                          <strong style={{ color: 'var(--text-main)' }}>Note:</strong> {wo.description}
+                        </div>
+                      )}
                     </div>
 
                     <div style={{
@@ -515,112 +467,7 @@ export const MaintenanceHub = () => {
                 );
               }
 
-              // 3. Vehicle Due Soon (Needs Maintenance Scheduling)
-              const { vehicle: v, dueDiag, pms } = item;
-              const img = getVehicleImage(v);
-              const ev = dueDiag ? evaluateDiagnostic(dueDiag, v.odometerKm) : null;
-
-              return (
-                <div
-                  key={item.id}
-                  className="data-card"
-                  style={{
-                    background: 'var(--bg-surface)',
-                    border: '1px solid var(--border-light)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '1rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    boxShadow: 'var(--shadow-sm)'
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.75rem' }}>
-                      <img
-                        src={img}
-                        alt={v.code}
-                        style={{
-                          width: '48px',
-                          height: '36px',
-                          borderRadius: '5px',
-                          objectFit: 'cover',
-                          border: '1px solid var(--border-subtle)',
-                          flexShrink: 0
-                        }}
-                      />
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
-                          <div style={{ fontWeight: 700, fontSize: '0.94rem', color: 'var(--text-main)' }}>
-                            {v.code} <span className="mono" style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>&bull; {v.plateNo}</span>
-                          </div>
-                          <span className="badge badge-danger" style={{ fontSize: '0.68rem', flexShrink: 0 }}>
-                            Due Soon
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {v.makeModel}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.85rem' }}>
-                      <div style={{
-                        background: 'var(--bg-surface-subtle)',
-                        border: '1px solid var(--border-light)',
-                        borderRadius: '6px',
-                        padding: '0.45rem 0.65rem'
-                      }}>
-                        <span style={{ display: 'block', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          DUE ITEM
-                        </span>
-                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-main)', display: 'block', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {dueDiag ? dueDiag.type : pms.milestone}
-                        </span>
-                      </div>
-
-                      <div style={{
-                        background: 'var(--bg-surface-subtle)',
-                        border: '1px solid var(--border-light)',
-                        borderRadius: '6px',
-                        padding: '0.45rem 0.65rem'
-                      }}>
-                        <span style={{ display: 'block', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          REMAINING
-                        </span>
-                        <span className="mono" style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-main)', display: 'block', marginTop: '2px' }}>
-                          {ev && ev.remainingKm !== null
-                            ? `${ev.remainingKm.toLocaleString()} km left`
-                            : pms.targetDate}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    paddingTop: '0.65rem',
-                    borderTop: '1px solid var(--border-light)'
-                  }}>
-                    <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                      {shortPerson(dueDiag?.assignedPerson)}
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-primary"
-                      style={{ padding: '0.28rem 0.7rem', fontSize: '0.76rem' }}
-                      onClick={() => {
-                        setSelectedVehicle(v);
-                        setModalType('new-wo');
-                      }}
-                    >
-                      <Plus size={13} /> Start Service
-                    </button>
-                  </div>
-                </div>
-              );
+              return null;
             })}
           </div>
         )}

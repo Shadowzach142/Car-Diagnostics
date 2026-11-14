@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFleet } from '../../context/FleetContext';
 import { getVehicleImage, getEmployeeVehiclesWithAccess } from '../../data/fleetData';
 import {
@@ -24,6 +24,10 @@ export const DriverDetailModal = () => {
   } = useFleet();
 
   const [isEditingAccess, setIsEditingAccess] = useState(false);
+
+  useEffect(() => {
+    setIsEditingAccess(false);
+  }, [modalType, selectedDriver?.id]);
 
   if (modalType !== 'driver-detail' || !selectedDriver) return null;
 

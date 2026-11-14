@@ -387,15 +387,36 @@ export const FleetProvider = ({ children }) => {
     setVehicles(prev => prev.map(v => {
       if (v.code === targetWO.vehicleCode) {
         if (isCompleted) {
+          const woTypeLower = (targetWO.type || '').toLowerCase();
+          const checklistLower = (targetWO.checklist || []).map(item => item.toLowerCase());
           const updatedDiag = (v.diagnostics || buildDefaultVehicleDiagnostics(v)).map(d => {
-            const matchType = targetWO.type?.toLowerCase().includes('oil') && d.type.toLowerCase().includes('oil');
-            if (matchType) {
+            const dTypeLower = (d.type || '').toLowerCase();
+            const isChecklistMatch = checklistLower.includes(dTypeLower);
+            const isExactOrKeywordMatch =
+              isChecklistMatch ||
+              dTypeLower === woTypeLower ||
+              (woTypeLower.includes('oil') && dTypeLower.includes('oil')) ||
+              (woTypeLower.includes('brake') && dTypeLower.includes('brake')) ||
+              (woTypeLower.includes('dielectric') && dTypeLower.includes('dielectric')) ||
+              (woTypeLower.includes('tire') && dTypeLower.includes('tire')) ||
+              (woTypeLower.includes('battery') && dTypeLower.includes('battery'));
+
+            if (isExactOrKeywordMatch) {
               const interval = Number(d.intervalKm) || 5000;
+              let nextTargetDate = d.targetDate;
+              if (d.intervalMonths && d.intervalMonths !== 'CUSTOM') {
+                const [y, m, day] = today.split('-').map(Number);
+                const targetMonthDate = new Date(y, (m - 1) + Number(d.intervalMonths), 1);
+                const maxDay = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth() + 1, 0).getDate();
+                targetMonthDate.setDate(Math.min(day, maxDay));
+                nextTargetDate = `${targetMonthDate.getFullYear()}-${String(targetMonthDate.getMonth() + 1).padStart(2, '0')}-${String(targetMonthDate.getDate()).padStart(2, '0')}`;
+              }
               return {
                 ...d,
                 lastDoneKm: v.odometerKm || d.lastDoneKm,
                 targetKm: (v.odometerKm || 0) + interval,
                 lastDoneDate: today,
+                targetDate: nextTargetDate,
                 assignedPerson: updates.assignedMechanic || targetWO.assignedMechanic || d.assignedPerson
               };
             }
@@ -622,7 +643,7 @@ export const FleetProvider = ({ children }) => {
     const id = `VEH-${String(vehicles.length + 1).padStart(3, '0')}`;
     const branch = branches.find(b => b.id === vehicleData.branchId);
 
-    const newVehicle = {
+    const baseVehicle = {
       id,
       ...vehicleData,
       status: 'ACTIVE',
@@ -639,8 +660,9 @@ export const FleetProvider = ({ children }) => {
       warrantyPolicy: vehicleData.warrantyPolicy || '3 Years / 100,000 km Fleet Assurance',
       fuelLevelPct: 100,
       lastServiceDate: vehicleData.acquisitionDate || new Date().toISOString().substring(0, 10),
-      nextServiceDueKm: 5000,
+      nextServiceDueKm: Number(vehicleData.odometerKm || 250) + 5000,
       nextServiceDueDate: '2027-01-15',
+      authorizedDriverIds: Array.isArray(vehicleData.authorizedDriverIds) ? vehicleData.authorizedDriverIds : [],
       coordinates: {
         lat: branch ? Number((branch.coordinates.lat + (Math.random() - 0.5) * 0.015).toFixed(4)) : 7.0089,
         lng: branch ? Number((branch.coordinates.lng + (Math.random() - 0.5) * 0.015).toFixed(4)) : 125.0898
@@ -649,6 +671,13 @@ export const FleetProvider = ({ children }) => {
         payloadCapacity: 'Heavy Commercial Spec',
         transmission: 'Heavy Duty Manual'
       }
+    };
+
+    const newVehicle = {
+      ...baseVehicle,
+      diagnostics: Array.isArray(vehicleData.diagnostics) && vehicleData.diagnostics.length > 0
+        ? vehicleData.diagnostics
+        : buildDefaultVehicleDiagnostics(baseVehicle)
     };
 
     setVehicles(prev => [...prev, newVehicle]);
@@ -702,67 +731,59 @@ export const FleetProvider = ({ children }) => {
     return true;
   };
 
-  const grantVehicleAccess = (vehicleId, driverId) => {
-    setVehicles(prev => prev.map(v => {
-      if (v.id === vehicleId || v.code === vehicleId) {
-        const currentList = getVehicleAuthorizedDrivers(v, drivers).map(d => d.id);
-        const currentIds = Array.isArray(v.authorizedDriverIds) ? v.authorizedDriverIds : currentList;
-        if (!currentIds.includes(driverId)) {
-          const updatedIds = [...currentIds, driverId];
-          const updated = { ...v, authorizedDriverIds: updatedIds };
-          if (selectedVehicle && (selectedVehicle.id === v.id || selectedVehicle.code === v.code)) {
-            setSelectedVehicle(updated);
-          }
-          return updated;
-        }
-      }
+  const applyDriverAccessChange = (v, driverId, mode) => {
+    const currentList = getVehicleAuthorizedDrivers(v, drivers).map(d => d.id);
+    const currentIds = Array.isArray(v.authorizedDriverIds) ? v.authorizedDriverIds : currentList;
+    const exists = currentIds.includes(driverId);
+
+    let updatedIds = currentIds;
+    if (mode === 'grant' && !exists) {
+      updatedIds = [...currentIds, driverId];
+    } else if (mode === 'revoke' && exists) {
+      updatedIds = currentIds.filter(id => id !== driverId);
+    } else if (mode === 'toggle') {
+      updatedIds = exists
+        ? currentIds.filter(id => id !== driverId)
+        : [...currentIds, driverId];
+    } else {
       return v;
-    }));
+    }
+
+    return { ...v, authorizedDriverIds: updatedIds };
+  };
+
+  const syncSelectedVehicleAccess = (vehicleId, driverId, mode) => {
+    setSelectedVehicle(prevSel => {
+      if (!prevSel || (prevSel.id !== vehicleId && prevSel.code !== vehicleId)) return prevSel;
+      return applyDriverAccessChange(prevSel, driverId, mode);
+    });
+  };
+
+  const grantVehicleAccess = (vehicleId, driverId) => {
+    setVehicles(prev => prev.map(v =>
+      (v.id === vehicleId || v.code === vehicleId) ? applyDriverAccessChange(v, driverId, 'grant') : v
+    ));
+    syncSelectedVehicleAccess(vehicleId, driverId, 'grant');
     const d = drivers.find(item => item.id === driverId);
     logAuditEvent('Vehicle Access Granted', 'CHAIN_OF_CUSTODY', `Granted vehicle access for ${d?.name || driverId} on asset ${vehicleId}`);
     return true;
   };
 
   const revokeVehicleAccess = (vehicleId, driverId) => {
-    setVehicles(prev => prev.map(v => {
-      if (v.id === vehicleId || v.code === vehicleId) {
-        const currentList = getVehicleAuthorizedDrivers(v, drivers).map(d => d.id);
-        const currentIds = Array.isArray(v.authorizedDriverIds) ? v.authorizedDriverIds : currentList;
-        const updatedIds = currentIds.filter(id => id !== driverId);
-        const updated = { ...v, authorizedDriverIds: updatedIds };
-        if (selectedVehicle && (selectedVehicle.id === v.id || selectedVehicle.code === v.code)) {
-          setSelectedVehicle(updated);
-        }
-        return updated;
-      }
-      return v;
-    }));
+    setVehicles(prev => prev.map(v =>
+      (v.id === vehicleId || v.code === vehicleId) ? applyDriverAccessChange(v, driverId, 'revoke') : v
+    ));
+    syncSelectedVehicleAccess(vehicleId, driverId, 'revoke');
     const d = drivers.find(item => item.id === driverId);
     logAuditEvent('Vehicle Access Revoked', 'CHAIN_OF_CUSTODY', `Revoked vehicle access for ${d?.name || driverId} on asset ${vehicleId}`);
     return true;
   };
 
   const toggleVehicleAccess = (vehicleId, driverId) => {
-    setVehicles(prev => prev.map(v => {
-      if (v.id === vehicleId || v.code === vehicleId) {
-        const currentList = getVehicleAuthorizedDrivers(v, drivers).map(d => d.id);
-        const currentIds = Array.isArray(v.authorizedDriverIds)
-          ? v.authorizedDriverIds
-          : currentList;
-
-        const exists = currentIds.includes(driverId);
-        const updatedIds = exists
-          ? currentIds.filter(id => id !== driverId)
-          : [...currentIds, driverId];
-
-        const updated = { ...v, authorizedDriverIds: updatedIds };
-        if (selectedVehicle && (selectedVehicle.id === v.id || selectedVehicle.code === v.code)) {
-          setSelectedVehicle(updated);
-        }
-        return updated;
-      }
-      return v;
-    }));
+    setVehicles(prev => prev.map(v =>
+      (v.id === vehicleId || v.code === vehicleId) ? applyDriverAccessChange(v, driverId, 'toggle') : v
+    ));
+    syncSelectedVehicleAccess(vehicleId, driverId, 'toggle');
 
     const d = drivers.find(item => item.id === driverId);
     logAuditEvent('Vehicle Access Modified', 'CHAIN_OF_CUSTODY', `Toggled operational access clearance for operator ${d?.name || driverId} on asset ${vehicleId}`);
@@ -772,7 +793,7 @@ export const FleetProvider = ({ children }) => {
   const addBooking = (newBooking) => {
     const bookingWithId = {
       ...newBooking,
-      id: newBooking.id || `BK-${new Date().getFullYear()}-${String(bookings.length + 1).padStart(3, '0')}`,
+      id: newBooking.id || `BK-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`,
       status: newBooking.status || 'Scheduled'
     };
     setBookings(prev => [bookingWithId, ...prev]);

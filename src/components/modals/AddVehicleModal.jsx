@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFleet } from '../../context/FleetContext';
 import { DEFAULT_VEHICLE_IMAGES } from '../../data/fleetData';
 import {
@@ -65,6 +65,27 @@ export const AddVehicleModal = () => {
   const [warrantyPolicy, setWarrantyPolicy] = useState('3 Years / 100,000 km Fleet Assurance');
   const [image, setImage] = useState(DEFAULT_VEHICLE_IMAGES['Pickup']);
   const [imageUrlInput, setImageUrlInput] = useState('');
+
+  useEffect(() => {
+    if (modalType === 'add-vehicle') {
+      const defaultClass = vehicleClassifications[0] || 'Pickup';
+      setCode('');
+      setPlateNo('');
+      setMakeModel('');
+      setYear(2024);
+      setClassification(defaultClass);
+      setBranchId(branches[0]?.id || 'BR-KID');
+      setCustodianDepartment(custodianDepartments[0] || 'Technical / Engineering');
+      setSupplier('');
+      setOrCrNo('');
+      setAssetTag('');
+      setVin('');
+      setEngineNo('');
+      setFuelType('Diesel');
+      setImage(DEFAULT_VEHICLE_IMAGES[defaultClass] || DEFAULT_VEHICLE_IMAGES['Pickup']);
+      setImageUrlInput('');
+    }
+  }, [modalType, vehicleClassifications, branches, custodianDepartments]);
 
   if (modalType !== 'add-vehicle') return null;
 

@@ -40,7 +40,7 @@ export const CompleteWorkOrderModal = () => {
       <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '580px' }}>
         <div className="modal-box-header">
           <div className="modal-box-title">
-            <CheckCircle2 size={20} color="var(--primary)" />
+            <CheckCircle2 size={20} color="#65A30D" />
             <span>Record Vehicle Return &amp; Expense Voucher</span>
           </div>
           <button

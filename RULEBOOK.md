@@ -94,6 +94,12 @@ Component ──(dispatch action)──► FleetContext (mutation + audit log) �
 ```
 - Relational helpers live in `fleetData.js` (e.g. `getVehicleAuthorizedDrivers`, `getEmployeeVehiclesWithAccess`) and must stay pure so they map to SQL joins/views later.
 - Cross-module effects live in `FleetContext` only: creating a work order sets the vehicle `IN-SHOP` and adds a calendar entry; completing it restores `ACTIVE` and writes a repair voucher; every grant/revoke writes an audit log.
+- **Ongoing Health (`Add Cars`) & Car Profiling (`AddVehicleModal` → `FleetContext.addVehicle`) Connection**: Clicking **Add Cars** in **Ongoing Health** opens a Car Profiling vehicle picker first so users select an existing profiled vehicle to add/configure diagnostic trackers (with a `+ Register New Car in Profiling` option if the vehicle is not in Car Profiling yet). Registering a new vehicle via `AddVehicleModal` writes one unified record to `vehicles[]` with initialized `diagnostics` (`buildDefaultVehicleDiagnostics`) and `authorizedDriverIds: []`, automatically connecting it across tabs:
+  - **Car Profiling** (`VehicleProfiling.jsx`) & **Fleet Directory** (`FleetDirectory.jsx`): Immediately displays the vehicle's profile, specs, and operator access count.
+  - **Ongoing Health** (`OngoingHealth.jsx`): Appears with default diagnostic intervals (`Engine Oil & Filter Change`, `Brake Pads & Fluid Check`, etc.) ready to customize or send **To Maintenance**.
+  - **Employees** (`DriverRoster.jsx`): Available in `EmployeeAccessModal` and `VehicleAccessModal` for operator clearance.
+  - **Calendar** (`BookingsCalendar.jsx`): Auto-generates Insurance and LTO Registration compliance milestones from the vehicle's validity dates.
+  - **Branch Map** (`MapView.jsx`) & **Security & Audit** (`SecurityAudit.jsx`): Plots the asset at its assigned station's coordinates and logs an `Asset Commissioned` audit entry.
 - localStorage keys are versioned in `STORAGE_KEYS` (e.g. `flt_bookings_react_v4`). If a stored shape changes, add a migration in the `useState` initializer (see the `drivers` title/department migration) or bump the key.
 
 ### Field-Name Mapping (Frontend → MS SQL)
@@ -283,6 +289,11 @@ When the company instructs the team to integrate with their MS SQL Server, the d
 - **NEVER use bright saturated backgrounds** (e.g. bright pastel yellow `#FFFBEB`, bright purple `#F5F3FF`, or bright blue `#EFF6FF`).
 - **NEVER use thick 4px colored accent stripes** on cards or detail modal boxes.
 - **Accent Theme**: Official COTELCO lime accent (`var(--primary)`, `#D4ED31`) is reserved strictly for primary interactive call-to-actions (e.g. `Add Vehicle`, `Add Employee`, `Done`, `Save`).
+
+### Stability & No Dynamic Layout Movement
+- **Never make everything dynamically move**: Switching tabs, toggling modes (e.g. `By KM` / `By Date` / `Both`), or selecting options inside forms/modals MUST NOT mount/unmount rows in a way that causes inputs, buttons, or modal heights to jump or shift positions.
+- Keep form rows in **fixed, predictable positions** — dim and disable inactive fields (`opacity` + `disabled`) instead of removing them from the layout.
+- Avoid wrapping pill bars that reflow unpredictably; use clean fixed-height segmented tabs or a single `<select>` picker.
 
 ### Card & Label Formatting
 - **Validity Card Hierarchy**:

@@ -418,7 +418,7 @@ export const VehicleDetailModal = () => {
                 }}
                 title="View employees with access to this vehicle"
               >
-                <Users size={13} color="var(--primary)" />
+                <Users size={13} color="var(--text-secondary)" />
                 <span>Employees with Access: <strong>{getVehicleAuthorizedDrivers(selectedVehicle, drivers).length} Personnel</strong></span>
               </button>
             </div>
@@ -448,7 +448,7 @@ export const VehicleDetailModal = () => {
 
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
               gap: '0.75rem'
             }}>
               {/* Box A: Insurance Coverage */}
@@ -651,7 +651,7 @@ export const VehicleDetailModal = () => {
             </div>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 175px), 1fr))',
               gap: '0.85rem'
             }}>
               {highlightedBoxes.map(renderBox)}
@@ -672,7 +672,7 @@ export const VehicleDetailModal = () => {
             </div>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 175px), 1fr))',
               gap: '0.85rem'
             }}>
               {standardBoxes.map(renderBox)}

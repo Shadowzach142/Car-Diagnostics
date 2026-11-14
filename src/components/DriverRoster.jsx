@@ -65,7 +65,7 @@ export const DriverRoster = () => {
     if (!q) return list;
 
     return list.filter(d => {
-      const assignedVeh = vehicles.find(v => v.code === d.assignedVehicleCode);
+      const cleared = getEmployeeVehiclesWithAccess(d, vehicles);
       const searchFields = [
         d.name,
         d.employeeId,
@@ -75,9 +75,7 @@ export const DriverRoster = () => {
         d.category,
         d.licenseNo,
         d.phone,
-        d.assignedVehicleCode,
-        assignedVeh?.plateNo,
-        assignedVeh?.makeModel
+        ...cleared.flatMap(v => [v.code, v.plateNo, v.makeModel])
       ];
       return searchFields.some(f => String(f || '').toLowerCase().includes(q));
     });
@@ -191,7 +189,7 @@ export const DriverRoster = () => {
         ) : viewMode === 'cards' ? (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
             gap: '1rem'
           }}>
             {filteredDrivers.map(d => {

@@ -26,11 +26,15 @@ export const AddDriverModal = () => {
 
   useEffect(() => {
     if (modalType === 'add-driver') {
-      if (!jobTitles.includes(title) && jobTitles.length > 0) setTitle(jobTitles[0]);
-      if (!departments.includes(department) && departments.length > 0) setDepartment(departments[0]);
-      if (!employeeClassifications.includes(category) && employeeClassifications.length > 0) setCategory(employeeClassifications[0]);
+      setName('');
+      setEmployeeId(`EMP-2026-${Math.floor(100 + Math.random() * 900)}`);
+      setPhone('0919-550-2211');
+      if (jobTitles.length > 0 && !jobTitles.includes(title)) setTitle(jobTitles[0]);
+      if (departments.length > 0 && !departments.includes(department)) setDepartment(departments[0]);
+      if (employeeClassifications.length > 0 && !employeeClassifications.includes(category)) setCategory(employeeClassifications[0]);
+      if (branches.length > 0 && !branches.some(b => b.id === branchId)) setBranchId(branches[0].id);
     }
-  }, [modalType]);
+  }, [modalType, jobTitles, departments, employeeClassifications, branches]);
 
   if (modalType !== 'add-driver') return null;
 

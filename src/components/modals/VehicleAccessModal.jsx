@@ -32,13 +32,11 @@ export const VehicleAccessModal = () => {
   const [selectedToRemove, setSelectedToRemove] = useState([]);
   const [recentlyGrantedId, setRecentlyGrantedId] = useState(null);
 
-  if (modalType !== 'vehicle-access' || !selectedVehicle) return null;
-
-  const branch = branches.find(b => b.id === selectedVehicle.branchId);
-  const vehiclePhoto = getVehicleImage(selectedVehicle);
-  const authorizedDrivers = getVehicleAuthorizedDrivers(selectedVehicle, drivers);
+  const branch = selectedVehicle ? branches.find(b => b.id === selectedVehicle.branchId) : null;
+  const vehiclePhoto = selectedVehicle ? getVehicleImage(selectedVehicle) : '';
+  const authorizedDrivers = selectedVehicle ? getVehicleAuthorizedDrivers(selectedVehicle, drivers) : [];
   const authIds = new Set(authorizedDrivers.map(d => d.id));
-  const unclearedDrivers = drivers.filter(d => !authIds.has(d.id));
+  const unclearedDrivers = selectedVehicle ? drivers.filter(d => !authIds.has(d.id)) : [];
 
   // Search and filter for uncleared employees (handles large workforce datasets)
   const filteredUncleared = useMemo(() => {
@@ -126,6 +124,8 @@ export const VehicleAccessModal = () => {
     });
     return Array.from(set);
   }, [unclearedDrivers]);
+
+  if (modalType !== 'vehicle-access' || !selectedVehicle) return null;
 
   return (
     <div className="modal-overlay" onClick={handleClose}>

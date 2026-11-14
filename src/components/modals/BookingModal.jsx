@@ -33,23 +33,26 @@ export const BookingModal = () => {
       setDriver(defaultVehicle?.assignedDriver || '');
       setBranchId(defaultVehicle?.branchId || branches[0]?.id || '');
 
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const resolvedType = selectedBooking?.type || 'DISPATCH';
+
       if (selectedBooking) {
-        if (selectedBooking.date) setDate(selectedBooking.date);
-        if (selectedBooking.startTime) setStartTime(selectedBooking.startTime);
-        if (selectedBooking.endTime) setEndTime(selectedBooking.endTime);
-        if (selectedBooking.type) setType(selectedBooking.type);
+        setDate(selectedBooking.date || todayStr);
+        setStartTime(selectedBooking.startTime || '08:00');
+        setEndTime(selectedBooking.endTime || '11:00');
       } else {
-        setDate('2026-10-19');
+        setDate(todayStr);
         setStartTime('08:00');
         setEndTime('11:00');
-        setType('DISPATCH');
       }
 
-      setTitle(type === 'MAINTENANCE' ? 'Vehicle Maintenance' : 'Field Line Dispatch');
+      setType(resolvedType);
+      setTitle(resolvedType === 'MAINTENANCE' ? 'Vehicle Maintenance' : 'Field Line Dispatch');
       setDestination('');
       setPurpose('');
     }
-  }, [modalType, selectedBooking, vehicles, branches]);
+  }, [modalType, selectedBooking, selectedVehicle, vehicles, branches]);
 
   // When vehicle changes, sync driver and branch
   const handleVehicleChange = (id) => {

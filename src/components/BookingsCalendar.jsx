@@ -14,7 +14,9 @@ import {
   CheckCircle2,
   FileText,
   Printer,
-  Pencil
+  Pencil,
+  Plus,
+  Info
 } from 'lucide-react';
 
 const HOURS = [
@@ -39,8 +41,10 @@ const formatDateStr = (d) => {
   return `${year}-${month}-${day}`;
 };
 
-// Anchor around Oct 19, 2026
-const INITIAL_DATE = new Date(2026, 9, 19); // Oct is month index 9
+const getTodayStr = () => formatDateStr(new Date());
+
+// Default calendar to current date so today's dispatches & bookings appear immediately
+const INITIAL_DATE = new Date();
 
 export const BookingsCalendar = () => {
   const {
@@ -64,9 +68,11 @@ export const BookingsCalendar = () => {
   const [draggedBookingId, setDraggedBookingId] = useState(null);
   const [dragOverSlot, setDragOverSlot] = useState(null);
   const [rescheduleNotice, setRescheduleNotice] = useState(null);
+  const [expandedSlots, setExpandedSlots] = useState({});
 
   // Compute week days (Monday - Friday or Monday - Sunday)
   const weekDays = useMemo(() => {
+    const todayStr = getTodayStr();
     const curr = new Date(currentDate);
     // Find Monday of current week
     const day = curr.getDay(); // 0 is Sun, 1 is Mon
@@ -74,8 +80,8 @@ export const BookingsCalendar = () => {
     const monday = new Date(curr.setDate(diff));
 
     const days = [];
-    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-    for (let i = 0; i < 5; i++) {
+    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    for (let i = 0; i < 7; i++) {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
       days.push({
@@ -83,7 +89,7 @@ export const BookingsCalendar = () => {
         dayNum: d.getDate(),
         dateStr: formatDateStr(d),
         dateObj: d,
-        isToday: formatDateStr(d) === '2026-10-19'
+        isToday: formatDateStr(d) === todayStr
       });
     }
     return days;
@@ -91,6 +97,7 @@ export const BookingsCalendar = () => {
 
   // Compute Month days
   const monthGrid = useMemo(() => {
+    const todayStr = getTodayStr();
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1);
@@ -108,7 +115,7 @@ export const BookingsCalendar = () => {
         dateStr: formatDateStr(prevDate),
         dayNum: prevDate.getDate(),
         isCurrentMonth: false,
-        isToday: formatDateStr(prevDate) === '2026-10-19'
+        isToday: formatDateStr(prevDate) === todayStr
       });
     }
 
@@ -119,7 +126,7 @@ export const BookingsCalendar = () => {
         dateStr: formatDateStr(thisDate),
         dayNum: d,
         isCurrentMonth: true,
-        isToday: formatDateStr(thisDate) === '2026-10-19'
+        isToday: formatDateStr(thisDate) === todayStr
       });
     }
 
@@ -130,7 +137,7 @@ export const BookingsCalendar = () => {
         dateStr: formatDateStr(nextDate),
         dayNum: nextDate.getDate(),
         isCurrentMonth: false,
-        isToday: formatDateStr(nextDate) === '2026-10-19'
+        isToday: formatDateStr(nextDate) === todayStr
       });
     }
 
@@ -155,7 +162,7 @@ export const BookingsCalendar = () => {
   };
 
   const handleToday = () => {
-    setCurrentDate(new Date(2026, 9, 19));
+    setCurrentDate(new Date());
   };
 
   // Header Title
@@ -167,7 +174,7 @@ export const BookingsCalendar = () => {
   const headerTitle = useMemo(() => {
     const m = monthNames[currentDate.getMonth()];
     const y = currentDate.getFullYear();
-    const isToday = formatDateStr(currentDate) === '2026-10-19';
+    const isToday = formatDateStr(currentDate) === getTodayStr();
 
     if (viewMode === 'day') {
       return `${m} ${currentDate.getDate()}, ${y}`;
@@ -459,6 +466,17 @@ export const BookingsCalendar = () => {
         >
           <Printer size={15} /> Print Schedule
         </button>
+
+        <button
+          type="button"
+          className="btn btn-primary no-print"
+          onClick={() => {
+            setSelectedBooking(null);
+            setModalType('new-booking');
+          }}
+        >
+          <Plus size={15} /> Add Schedule
+        </button>
       </div>
 
       {/* Main Calendar Card */}
@@ -559,8 +577,8 @@ export const BookingsCalendar = () => {
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
             <CheckCircle2 size={13} color="#16A34A" /> Automated schedule synced from vehicle dispatches, PMS, Insurance &amp; LTO Registration dates.
           </span>
-          <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-            💡 Tip: Drag and drop cards across days or hours to reschedule
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            <Info size={13} /> Tip: Drag and drop cards across days or hours to reschedule, or click any empty slot to schedule
           </span>
         </div>
 
@@ -601,6 +619,14 @@ export const BookingsCalendar = () => {
                       <div
                         key={`${day.dateStr}-${hour.val}`}
                         className={`timetable-grid-slot ${isSlotTarget ? 'slot-drag-target' : ''}`}
+                        onClick={() => {
+                          setSelectedBooking({
+                            date: day.dateStr,
+                            startTime: `${String(hour.val).padStart(2, '0')}:00`,
+                            endTime: `${String(Math.min(18, hour.val + 2)).padStart(2, '0')}:00`
+                          });
+                          setModalType('new-booking');
+                        }}
                         onDragOver={(e) => {
                           e.preventDefault();
                           e.dataTransfer.dropEffect = 'move';
@@ -617,75 +643,99 @@ export const BookingsCalendar = () => {
                           e.preventDefault();
                           handleDropSlot(day.dateStr, hour.val);
                         }}
+                        title={`Click to add schedule on ${day.dateStr} at ${hour.label}`}
                       >
-                        {slotBookings.map(b => {
-                          const v = vehicles.find(item => item.code === b.vehicleCode || item.id === b.vehicleId);
-                          const photo = b.avatar || getVehicleImage(v);
-                          const isMaint = b.type === 'MAINTENANCE';
-                          const isCompliance = b.type === 'COMPLIANCE';
-                          const isReg = b.complianceSubType?.includes('REGISTRATION');
-
-                          const complianceStyle = isCompliance
-                            ? {
-                                background: isReg ? '#F5F3FF' : '#EFF6FF',
-                                borderColor: isReg ? '#DDD6FE' : '#BFDBFE',
-                                borderLeft: isReg ? '4px solid #7C3AED' : '4px solid #2563EB'
-                              }
-                            : undefined;
+                        {(() => {
+                          const slotKey = `${day.dateStr}-${hour.val}`;
+                          const isExpanded = !!expandedSlots[slotKey];
+                          const visibleBookings = isExpanded ? slotBookings : slotBookings.slice(0, 2);
+                          const hiddenCount = slotBookings.length - visibleBookings.length;
 
                           return (
-                            <div
-                              key={b.id}
-                              draggable={true}
-                              onDragStart={(e) => {
-                                e.stopPropagation();
-                                e.dataTransfer.setData('text/plain', b.id);
-                                e.dataTransfer.effectAllowed = 'move';
-                                setDraggedBookingId(b.id);
-                              }}
-                              onDragEnd={() => {
-                                setDraggedBookingId(null);
-                                setDragOverSlot(null);
-                              }}
-                              className={`booking-pill-card ${isMaint ? 'booking-pill-maint' : 'booking-pill-dispatch'} ${draggedBookingId === b.id ? 'is-dragging' : ''}`}
-                              style={complianceStyle}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleBookingClick(b);
-                              }}
-                              title={`Drag to update date · Click to inspect: ${b.title} (${b.startTime} - ${b.endTime})`}
-                            >
-                              <img
-                                src={photo}
-                                alt={b.driver || b.vehicleCode}
-                                className="booking-card-avatar"
-                              />
-                              <div className="booking-card-info">
-                                <div className="booking-card-title" style={isCompliance ? { color: isReg ? '#4C1D95' : '#1E3A8A' } : undefined}>
-                                  {b.vehicleCode} {isCompliance ? `• ${isReg ? 'LTO Reg' : 'Insurance'}` : `• ${b.driver}`}
-                                </div>
-                                <div className="booking-card-subtitle">{b.title}</div>
-                              </div>
-                              <button
-                                type="button"
-                                className="booking-card-quick-edit"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (b.isComplianceRecord && v) {
-                                    setSelectedVehicle(v);
-                                    setModalType('vehicle-detail');
-                                  } else {
-                                    setSelectedBooking(b);
-                                    setModalType('edit-booking');
-                                  }
-                                }}
-                                title={b.isComplianceRecord ? 'Edit insurance/registration dates in Vehicle Profile' : 'Edit schedule details'}
-                              >
-                                <Pencil size={11} />
-                              </button>
-                            </div>
+                            <>
+                              {visibleBookings.map(b => {
+                                const v = vehicles.find(item => item.code === b.vehicleCode || item.id === b.vehicleId);
+                                const photo = b.avatar || getVehicleImage(v);
+                                const isMaint = b.type === 'MAINTENANCE';
+                                const isCompliance = b.type === 'COMPLIANCE';
+                                const isReg = b.complianceSubType?.includes('REGISTRATION');
+
+                                const complianceStyle = isCompliance
+                                  ? {
+                                      background: 'var(--bg-surface-subtle)',
+                                      borderColor: 'var(--border-medium)'
+                                    }
+                                  : undefined;
+
+                                return (
+                                  <div
+                                    key={b.id}
+                                    draggable={true}
+                                    onDragStart={(e) => {
+                                      e.stopPropagation();
+                                      e.dataTransfer.setData('text/plain', b.id);
+                                      e.dataTransfer.effectAllowed = 'move';
+                                      setDraggedBookingId(b.id);
+                                    }}
+                                    onDragEnd={() => {
+                                      setDraggedBookingId(null);
+                                      setDragOverSlot(null);
+                                    }}
+                                    className={`booking-pill-card ${isMaint ? 'booking-pill-maint' : 'booking-pill-dispatch'} ${draggedBookingId === b.id ? 'is-dragging' : ''}`}
+                                    style={complianceStyle}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleBookingClick(b);
+                                    }}
+                                    title={`Drag to update date · Click to inspect: ${b.title} (${b.startTime} - ${b.endTime})`}
+                                  >
+                                    <img
+                                      src={photo}
+                                      alt={b.driver || b.vehicleCode}
+                                      className="booking-card-avatar"
+                                    />
+                                    <div className="booking-card-info">
+                                      <div className="booking-card-title">
+                                        {b.vehicleCode} {isCompliance ? `• ${isReg ? 'LTO Reg' : 'Insurance'}` : `• ${b.driver}`}
+                                      </div>
+                                      <div className="booking-card-subtitle">{b.title}</div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="booking-card-quick-edit"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (b.isComplianceRecord && v) {
+                                          setSelectedVehicle(v);
+                                          setModalType('vehicle-detail');
+                                        } else {
+                                          setSelectedBooking(b);
+                                          setModalType('edit-booking');
+                                        }
+                                      }}
+                                      title={b.isComplianceRecord ? 'Edit insurance/registration dates in Vehicle Profile' : 'Edit schedule details'}
+                                    >
+                                      <Pencil size={11} />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+
+                              {slotBookings.length > 2 && (
+                                <button
+                                  type="button"
+                                  className="timetable-more-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedSlots(prev => ({ ...prev, [slotKey]: !prev[slotKey] }));
+                                  }}
+                                >
+                                  {isExpanded ? 'Show fewer' : `+${hiddenCount} more in this hour`}
+                                </button>
+                              )}
+                            </>
                           );
-                        })}
+                        })()}
                       </div>
                     );
                   })}
@@ -711,7 +761,8 @@ export const BookingsCalendar = () => {
                     key={`${cell.dateStr}-${idx}`}
                     className={`month-cell ${!cell.isCurrentMonth ? 'outside' : ''} ${cell.isToday ? 'today' : ''}`}
                     onClick={() => {
-                      setCurrentDate(new Date(cell.dateStr));
+                      const [y, m, d] = cell.dateStr.split('-').map(Number);
+                      setCurrentDate(new Date(y, m - 1, d));
                       setViewMode('day');
                     }}
                   >
@@ -733,9 +784,9 @@ export const BookingsCalendar = () => {
                             key={b.id}
                             className={`month-event-chip ${b.type === 'MAINTENANCE' ? 'chip-maint' : 'chip-dispatch'}`}
                             style={isCompliance ? {
-                              background: isReg ? '#F5F3FF' : '#EFF6FF',
-                              color: isReg ? '#5B21B6' : '#1E40AF',
-                              border: `1px solid ${isReg ? '#DDD6FE' : '#BFDBFE'}`
+                              background: 'var(--bg-surface-subtle)',
+                              color: 'var(--text-main)',
+                              border: '1px solid var(--border-medium)'
                             } : undefined}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -814,8 +865,19 @@ export const BookingsCalendar = () => {
                       <div className="day-hour-label">{hour.label}</div>
                       <div className="day-hour-content">
                         {hourBookings.length === 0 ? (
-                          <div className="day-empty-slot" style={{ cursor: 'default' }}>
-                            <span style={{ color: 'var(--text-light)', fontSize: '0.78rem' }}>— No dispatches or maintenance</span>
+                          <div
+                            className="day-empty-slot"
+                            onClick={() => {
+                              setSelectedBooking({
+                                date: dateStr,
+                                startTime: `${String(hour.val).padStart(2, '0')}:00`,
+                                endTime: `${String(Math.min(18, hour.val + 2)).padStart(2, '0')}:00`
+                              });
+                              setModalType('new-booking');
+                            }}
+                            title={`Click to add schedule at ${hour.label}`}
+                          >
+                            <span style={{ color: 'var(--text-light)', fontSize: '0.78rem' }}>— No dispatches or maintenance (click to schedule)</span>
                           </div>
                         ) : (
                           hourBookings.map(b => {
@@ -845,21 +907,17 @@ export const BookingsCalendar = () => {
                                 style={{
                                   cursor: 'grab',
                                   ...(isCompliance ? {
-                                    background: isReg ? '#F5F3FF' : '#EFF6FF',
-                                    borderLeft: `4px solid ${isReg ? '#7C3AED' : '#2563EB'}`
+                                    background: 'var(--bg-surface-subtle)',
+                                    border: '1px solid var(--border-medium)'
                                   } : {})
                                 }}
                               >
                                 <img src={photo} alt={b.vehicleCode} className="day-card-photo" />
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem', flexWrap: 'wrap' }}>
                                     <span style={{ fontWeight: 800, fontSize: '0.92rem' }}>{b.vehicleCode}</span>
                                     <span
-                                      className={`badge ${isMaint ? 'badge-warning' : isCompliance ? 'badge-primary' : 'badge-success'}`}
-                                      style={isCompliance ? {
-                                        background: isReg ? '#EDE9FE' : '#DBEAFE',
-                                        color: isReg ? '#5B21B6' : '#1E40AF'
-                                      } : undefined}
+                                      className={`badge ${isMaint ? 'badge-warning' : isCompliance ? 'badge-neutral' : 'badge-success'}`}
                                     >
                                       {isMaint ? 'Maintenance' : isCompliance ? (isReg ? 'LTO Registration' : 'Insurance Validity') : 'Dispatch'}
                                     </span>

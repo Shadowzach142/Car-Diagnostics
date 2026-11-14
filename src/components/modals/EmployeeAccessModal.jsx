@@ -33,13 +33,11 @@ export const EmployeeAccessModal = () => {
   const [selectedToRemove, setSelectedToRemove] = useState([]);
   const [recentlyGrantedId, setRecentlyGrantedId] = useState(null);
 
-  if (modalType !== 'employee-access' || !selectedDriver) return null;
-
-  const branch = branches.find(b => b.id === selectedDriver.branchId);
-  const clearedVehicles = getEmployeeVehiclesWithAccess(selectedDriver, vehicles);
+  const branch = selectedDriver ? branches.find(b => b.id === selectedDriver.branchId) : null;
+  const clearedVehicles = selectedDriver ? getEmployeeVehiclesWithAccess(selectedDriver, vehicles) : [];
   const clearedCodes = new Set(clearedVehicles.map(v => v.code));
-  const unclearedVehicles = vehicles.filter(v => !clearedCodes.has(v.code));
-  const initials = selectedDriver.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const unclearedVehicles = selectedDriver ? vehicles.filter(v => !clearedCodes.has(v.code)) : [];
+  const initials = selectedDriver ? selectedDriver.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() : '';
 
   // Search and filter for uncleared vehicles in Grant Access tab (handles large datasets)
   const filteredUncleared = useMemo(() => {
@@ -61,6 +59,8 @@ export const EmployeeAccessModal = () => {
 
     return list;
   }, [unclearedVehicles, branchFilter, searchQuery]);
+
+  if (modalType !== 'employee-access' || !selectedDriver) return null;
 
   const handleGrantVehicle = (veh) => {
     grantVehicleAccess(veh.id, selectedDriver.id);
@@ -411,7 +411,7 @@ export const EmployeeAccessModal = () => {
                             <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)', lineHeight: 1.2 }}>
                               {veh.code} <span className="mono" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>&bull; {veh.plateNo}</span>
                             </div>
-                            <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.35 }}>
                               {veh.makeModel} &bull; {veh.classification} &bull; {vehBranch?.municipality || 'District'}
                             </div>
                           </div>
@@ -561,7 +561,7 @@ export const EmployeeAccessModal = () => {
                             <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)', lineHeight: 1.2 }}>
                               {veh.code} <span className="mono" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>&bull; {veh.plateNo}</span>
                             </div>
-                            <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.35 }}>
                               {veh.makeModel} &bull; {veh.classification} &bull; {vehBranch?.municipality || 'District'}
                             </div>
                           </div>
