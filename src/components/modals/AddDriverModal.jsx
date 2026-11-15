@@ -99,7 +99,7 @@ export const AddDriverModal = () => {
             </div>
 
             {/* Row 1: Name and Employee ID */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '0.85rem', marginBottom: '1rem' }}>
+            <div className="responsive-grid-2" style={{ marginBottom: '1rem' }}>
               <div className="form-group">
                 <label className="form-label">Employee Full Name: *</label>
                 <input
@@ -126,7 +126,7 @@ export const AddDriverModal = () => {
             </div>
 
             {/* Row 2: Title and Department */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.85rem', marginBottom: '1rem' }}>
+            <div className="responsive-grid-2" style={{ marginBottom: '1rem' }}>
               <div className="form-group">
                 <label className="form-label">
                   <Briefcase size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
@@ -163,7 +163,7 @@ export const AddDriverModal = () => {
             </div>
 
             {/* Row 3: Station, Contact Phone, and Classification */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1fr', gap: '0.85rem', marginBottom: '1rem' }}>
+            <div className="responsive-grid-3" style={{ marginBottom: '1rem' }}>
               <div className="form-group">
                 <label className="form-label">
                   <Building size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />

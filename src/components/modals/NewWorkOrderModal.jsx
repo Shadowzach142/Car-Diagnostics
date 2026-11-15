@@ -203,7 +203,7 @@ export const NewWorkOrderModal = () => {
             )}
 
             {/* 2. Category -> Dependent Task Dropdown */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr', gap: '0.75rem', marginBottom: '0.85rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '0.85rem' }}>
               <div className="form-group">
                 <label className="form-label">
                   <Layers size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
@@ -257,7 +257,7 @@ export const NewWorkOrderModal = () => {
             )}
 
             {/* 3. Assigned Repair Personnel & Current Maintenance Step */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: '0.75rem', marginBottom: '0.85rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '0.85rem' }}>
               <div className="form-group">
                 <label className="form-label">
                   <UserCheck size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
@@ -345,7 +345,7 @@ export const NewWorkOrderModal = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.65rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: '0.65rem' }}>
                 {(trackMode === 'KM' || trackMode === 'BOTH') && (
                   <>
                     <div className="form-group" style={{ margin: 0 }}>
@@ -443,7 +443,7 @@ export const NewWorkOrderModal = () => {
             </div>
 
             {/* 5. Priority & Diagnostic Notes */}
-            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '0.75rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem' }}>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Urgency:</label>
                 <select

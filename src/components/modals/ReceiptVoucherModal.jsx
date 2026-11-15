@@ -69,9 +69,7 @@ export const ReceiptVoucherModal = () => {
             </div>
 
             {/* Meta Grid */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
+            <div className="responsive-grid-2" style={{
               gap: '1rem',
               background: '#F8FAFC',
               padding: '1rem',
@@ -179,7 +177,7 @@ export const ReceiptVoucherModal = () => {
             {/* Signatures */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
               gap: '1.5rem',
               paddingTop: '1rem',
               borderTop: '1.5px dashed #CBD5E1',

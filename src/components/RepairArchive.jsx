@@ -344,7 +344,7 @@ export const RepairArchive = () => {
               </button>
             </div>
             <div className="modal-box-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxHeight: '75vh', overflowY: 'auto' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="responsive-grid-2" style={{ gap: '0.75rem' }}>
                 <div style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-light)', borderRadius: '6px', padding: '0.65rem 0.8rem' }}>
                   <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>VEHICLE</div>
                   <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-main)' }}>

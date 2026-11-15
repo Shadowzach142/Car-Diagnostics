@@ -467,7 +467,7 @@ export const VehicleAccessModal = () => {
           {activeTab === 'grant' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {/* Fixed-Height Search + Department Select Row */}
-              <div style={{ display: 'grid', gridTemplateColumns: departments.length > 0 ? '1fr auto' : '1fr', gap: '0.5rem', alignItems: 'center' }}>
+              <div className={departments.length > 0 ? 'access-filter-row' : undefined} style={{ gap: '0.5rem', alignItems: 'center' }}>
                 <div style={{ position: 'relative' }}>
                   <Search
                     size={15}
@@ -500,7 +500,7 @@ export const VehicleAccessModal = () => {
                     className="form-select"
                     value={deptFilter}
                     onChange={(e) => setDeptFilter(e.target.value)}
-                    style={{ height: '36px', fontSize: '0.8rem', minWidth: '165px' }}
+                    style={{ height: '36px', fontSize: '0.8rem', minWidth: 'min(100%, 165px)' }}
                     aria-label="Filter by department"
                   >
                     <option value="ALL">All Departments ({unclearedDrivers.length})</option>

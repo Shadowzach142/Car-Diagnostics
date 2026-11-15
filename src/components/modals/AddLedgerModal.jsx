@@ -378,7 +378,7 @@ export const AddLedgerModal = () => {
             </div>
 
             {/* Title + Date */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 155px', gap: '0.75rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem' }}>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Report Title *</label>
                 <input
@@ -405,7 +405,7 @@ export const AddLedgerModal = () => {
 
             {/* Director-only Facility / Source fields */}
             {!isMechanic && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="responsive-grid-2" style={{ gap: '0.75rem' }}>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Source</label>
                   <select

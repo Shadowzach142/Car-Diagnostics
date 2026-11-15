@@ -9,7 +9,8 @@ import {
   Contrast,
   RotateCcw,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  X
 } from 'lucide-react';
 
 const PAGE_META = {
@@ -53,9 +54,11 @@ export const TopBar = () => {
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const profileRef = useRef(null);
   const notifRef = useRef(null);
   const searchRef = useRef(null);
+  const mobileSearchRef = useRef(null);
 
   const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
 
@@ -82,6 +85,12 @@ export const TopBar = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (mobileSearchOpen) {
+      mobileSearchRef.current?.focus();
+    }
+  }, [mobileSearchOpen]);
+
   const meta = PAGE_META[activeTab] || PAGE_META.dashboard;
   const isMechanic = settings.currentRole === 'MECHANIC';
   const mechanicsList = editables.mechanics || [];
@@ -106,6 +115,7 @@ export const TopBar = () => {
   };
 
   return (
+    <>
     <header className="app-topbar">
       <div className="topbar-title-block">
         <h1 className="topbar-page-title">{meta.title}</h1>
@@ -129,6 +139,21 @@ export const TopBar = () => {
       </div>
 
       <div className="topbar-right">
+        <button
+          type="button"
+          className="topbar-icon-btn mobile-search-toggle"
+          onClick={() => {
+            setMobileSearchOpen((o) => !o);
+            setNotifOpen(false);
+            setProfileOpen(false);
+          }}
+          aria-pressed={mobileSearchOpen || Boolean(globalSearch)}
+          aria-label="Toggle fleet search"
+          title="Search fleet"
+        >
+          {mobileSearchOpen ? <X size={19} /> : <Search size={19} />}
+        </button>
+
         <button
           type="button"
           className="topbar-icon-btn"
@@ -274,5 +299,36 @@ export const TopBar = () => {
         </div>
       </div>
     </header>
+    {(mobileSearchOpen || Boolean(globalSearch)) && (
+      <div className="topbar-mobile-search-row">
+        <form className="topbar-search-form" onSubmit={submitSearch} role="search">
+          <Search size={17} className="search-icon" />
+          <input
+            ref={mobileSearchRef}
+            type="search"
+            className="topbar-search-input"
+            placeholder="Search vehicle, plate, or model..."
+            value={globalSearch}
+            onChange={(e) => setGlobalSearch(e.target.value)}
+            aria-label="Search the fleet"
+          />
+          {(globalSearch || mobileSearchOpen) && (
+            <button
+              type="button"
+              className="topbar-icon-btn"
+              style={{ width: '30px', height: '30px' }}
+              onClick={() => {
+                if (globalSearch) setGlobalSearch('');
+                else setMobileSearchOpen(false);
+              }}
+              aria-label={globalSearch ? 'Clear search' : 'Close search'}
+            >
+              <X size={15} />
+            </button>
+          )}
+        </form>
+      </div>
+    )}
+    </>
   );
 };

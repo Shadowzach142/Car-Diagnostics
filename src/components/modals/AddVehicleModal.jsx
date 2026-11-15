@@ -270,7 +270,7 @@ export const AddVehicleModal = () => {
             </div>
 
             {/* Core Specs Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '0.75rem' }}>
               <div className="form-group">
                 <label className="form-label">Fleet Code: *</label>
                 <input
@@ -296,7 +296,7 @@ export const AddVehicleModal = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '0.75rem' }}>
               <div className="form-group">
                 <label className="form-label">Make &amp; Model: *</label>
                 <input
@@ -323,7 +323,7 @@ export const AddVehicleModal = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '1.25rem' }}>
               <div className="form-group">
                 <label className="form-label">Classification: *</label>
                 <select
@@ -367,7 +367,7 @@ export const AddVehicleModal = () => {
               2. Acquisition &amp; Commercial Purchase Record
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '0.75rem' }}>
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                   <Calendar size={13} /> Date Bought / Acquired: *
@@ -397,7 +397,7 @@ export const AddVehicleModal = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '0.75rem' }}>
               <div className="form-group">
                 <label className="form-label">Supplier / Dealership / Vendor:</label>
                 <input
@@ -421,7 +421,7 @@ export const AddVehicleModal = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '1.25rem' }}>
               <div className="form-group">
                 <label className="form-label">COTELCO Property / Asset Tag No.:</label>
                 <input
@@ -446,7 +446,7 @@ export const AddVehicleModal = () => {
             </div>
 
             {/* Insurance & LTO Registration Validity (3-Year Default Calendar Inputs) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '0.75rem' }}>
               <div className="form-group">
                 <label className="form-label">Insurance Date Acquired:</label>
                 <input
@@ -467,7 +467,7 @@ export const AddVehicleModal = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '1.25rem' }}>
               <div className="form-group">
                 <label className="form-label">LTO Registration Acquired:</label>
                 <input
@@ -502,7 +502,7 @@ export const AddVehicleModal = () => {
               3. Engineering Specs &amp; Motor Pool Placement
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '0.75rem' }}>
               <div className="form-group">
                 <label className="form-label">Custodian Department / Pool:</label>
                 <select
@@ -531,7 +531,7 @@ export const AddVehicleModal = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '0.75rem' }}>
               <div className="form-group">
                 <label className="form-label">Chassis / VIN Number:</label>
                 <input

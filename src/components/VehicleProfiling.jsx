@@ -492,7 +492,7 @@ export const VehicleProfiling = () => {
                         paddingTop: '0.8rem',
                         marginBottom: '0.95rem',
                         display: 'grid',
-                        gridTemplateColumns: '1fr 1fr',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
                         gap: '0.5rem'
                       }}
                     >
@@ -512,7 +512,7 @@ export const VehicleProfiling = () => {
                   </div>
 
                   {/* Card Footer: View Profile & Car Health */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 120px), 1fr))', gap: '0.5rem' }}>
                     <button
                       type="button"
                       onClick={() => {

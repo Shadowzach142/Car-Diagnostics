@@ -242,7 +242,7 @@ export const MechanicProfile = () => {
         </div>
 
         {/* Neutral 2-Box Summary Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '0.75rem' }}>
           <div style={{
             background: 'var(--bg-surface-subtle)',
             border: '1px solid var(--border-light)',

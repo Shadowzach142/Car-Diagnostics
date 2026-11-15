@@ -455,7 +455,7 @@ export const EmployeeAccessModal = () => {
           {activeTab === 'grant' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {/* Fixed-Height Search + Station Select Row (No Horizontal Scrollbar / Clipping) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem', alignItems: 'center' }}>
+              <div className="access-filter-row" style={{ gap: '0.5rem', alignItems: 'center' }}>
                 <div style={{ position: 'relative' }}>
                   <Search
                     size={15}
@@ -487,7 +487,7 @@ export const EmployeeAccessModal = () => {
                   className="form-select"
                   value={branchFilter}
                   onChange={(e) => setBranchFilter(e.target.value)}
-                  style={{ height: '36px', fontSize: '0.8rem', minWidth: '155px' }}
+                  style={{ height: '36px', fontSize: '0.8rem', minWidth: 'min(100%, 155px)' }}
                   aria-label="Filter by station"
                 >
                   <option value="ALL">All Stations ({unclearedVehicles.length})</option>

@@ -99,9 +99,7 @@ export const DriverDetailModal = () => {
           </div>
 
           {/* Station & Contact Phone (Subtle 2-Box Info Grid matching Car Profiling) */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
+          <div className="responsive-grid-2" style={{
             gap: '0.75rem',
             marginBottom: '1rem'
           }}>

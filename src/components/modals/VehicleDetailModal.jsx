@@ -480,8 +480,8 @@ export const VehicleDetailModal = () => {
       <div className="modal-box" style={{ maxWidth: '820px', borderRadius: '16px' }} onClick={(e) => e.stopPropagation()}>
         {/* Top Profile Summary Header */}
         <div style={{ padding: '1.25rem 1.5rem 1rem 1.5rem', borderBottom: '1px solid var(--border-light)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
-            <div style={{ display: 'flex', gap: '1.1rem', alignItems: 'center', minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '1.1rem', alignItems: 'center', minWidth: 0, flex: '1 1 240px', flexWrap: 'wrap' }}>
               <div style={{ position: 'relative', width: '112px', height: '82px', flexShrink: 0 }}>
                 <img
                   src={(isEditing ? formState.imageUrl : '') || vehiclePhoto}
@@ -567,7 +567,7 @@ export const VehicleDetailModal = () => {
                     </div>
                   </>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem', maxWidth: '460px' }}>
+                  <div className="responsive-grid-2" style={{ gap: '0.45rem', maxWidth: '460px' }}>
                     <div>
                       <span style={{ ...labelStyle, fontSize: '0.58rem', display: 'block', marginBottom: '2px' }}>Vehicle Code / Name</span>
                       <input
@@ -716,10 +716,9 @@ export const VehicleDetailModal = () => {
           <div
             role="tablist"
             aria-label="Vehicle profile sections"
+            className="modal-tabs-4"
             style={{
               marginTop: '1.1rem',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
               gap: '4px',
               background: 'var(--bg-surface-subtle)',
               padding: '4px',
@@ -757,7 +756,7 @@ export const VehicleDetailModal = () => {
         </div>
 
         {/* Tab Body (Fixed height container so switching tabs never jumps modal size) */}
-        <div className="modal-box-body" style={{ minHeight: '440px', maxHeight: '64vh', overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
+        <div className="modal-box-body vehicle-detail-body">
           {/* TAB 1: OVERVIEW & SPECS */}
           {activeProfileTab === 'overview' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -767,7 +766,7 @@ export const VehicleDetailModal = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
                   <Wrench size={13} /> TECHNICAL &amp; UTILITY SPECIFICATIONS
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.65rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))', gap: '0.65rem' }}>
                   {renderSpecBox({
                     key: 'branchId',
                     label: 'ASSIGNED STATION',
@@ -835,7 +834,7 @@ export const VehicleDetailModal = () => {
                     View Registration Logs
                   </button>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="responsive-grid-2" style={{ gap: '0.75rem' }}>
                   <div style={specCardStyle}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={labelStyle}>INSURANCE COVERAGE</span>
@@ -1070,7 +1069,7 @@ export const VehicleDetailModal = () => {
                   )}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="responsive-grid-2" style={{ gap: '0.75rem' }}>
                   {/* Insurance Card */}
                   <div style={specCardStyle}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1078,7 +1077,7 @@ export const VehicleDetailModal = () => {
                       <ValidityBadge state={insState} />
                     </div>
                     {isEditing ? (
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.35rem' }}>
+                      <div className="responsive-grid-2" style={{ gap: '0.5rem', marginTop: '0.35rem' }}>
                         <div>
                           <span style={{ ...labelStyle, fontSize: '0.58rem' }}>Date Acquired</span>
                           <input
@@ -1119,7 +1118,7 @@ export const VehicleDetailModal = () => {
                       <ValidityBadge state={regState} />
                     </div>
                     {isEditing ? (
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.35rem' }}>
+                      <div className="responsive-grid-2" style={{ gap: '0.5rem', marginTop: '0.35rem' }}>
                         <div>
                           <span style={{ ...labelStyle, fontSize: '0.58rem' }}>Date Registered</span>
                           <input

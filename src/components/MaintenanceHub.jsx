@@ -462,7 +462,7 @@ export const MaintenanceHub = () => {
       <div className="page-body">
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 290px), 1fr))',
           gap: '1.15rem',
           alignItems: 'start'
         }}>
@@ -561,7 +561,7 @@ export const MaintenanceHub = () => {
             onClick={(e) => e.stopPropagation()}
             style={{
               width: 'min(100%, 440px)',
-              height: '100vh',
+              height: '100%',
               background: 'var(--bg-surface)',
               borderLeft: '1px solid var(--border-light)',
               display: 'flex',

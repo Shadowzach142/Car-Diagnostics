@@ -69,7 +69,7 @@ export const CompleteWorkOrderModal = () => {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            <div className="responsive-grid-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
               <div className="form-group">
                 <label className="form-label">
                   <span style={{ fontWeight: 800, color: 'var(--text-main)', marginRight: '4px' }}>₱</span> Invoiced Parts &amp; Supplies (PHP): *

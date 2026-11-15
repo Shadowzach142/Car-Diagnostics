@@ -315,7 +315,7 @@ export const Dashboard = () => {
                   <span className={`alert-marker ${v.status.toLowerCase().replace('-', '')}`} />
 
                   {/* Compact Vehicle Label (2 tight lines) */}
-                  <div className="vehicle-cell" style={{ minWidth: '160px' }}>
+                  <div className="vehicle-cell" style={{ minWidth: 0, flex: '1 1 135px' }}>
                     <div className="vehicle-cell-title">
                       {v.code} · <span className="mono" style={{ color: 'var(--text-muted)' }}>{v.plateNo}</span>
                     </div>

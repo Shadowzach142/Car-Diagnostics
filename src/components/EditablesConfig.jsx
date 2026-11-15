@@ -277,7 +277,7 @@ export const EditablesConfig = () => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: activeCategoryFilter === 'ALL' ? 'repeat(auto-fill, minmax(460px, 1fr))' : '1fr',
+          gridTemplateColumns: activeCategoryFilter === 'ALL' ? 'repeat(auto-fill, minmax(min(100%, 420px), 1fr))' : '1fr',
           gap: '1.15rem',
           alignItems: 'start'
         }}
@@ -587,7 +587,7 @@ export const EditablesConfig = () => {
               onSubmit={handleAddStation}
               style={{
                 display: 'grid',
-                gridTemplateColumns: '1.1fr 1.2fr auto',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))',
                 gap: '0.5rem',
                 background: 'var(--bg-surface-subtle)',
                 padding: '0.55rem',

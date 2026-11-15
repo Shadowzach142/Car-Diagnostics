@@ -411,7 +411,7 @@ export const DriverRoster = () => {
                   {/* Card Footer: 2-Button Equal Grid (Matches Car Profiling) */}
                   <div style={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
                     gap: '0.5rem',
                     paddingTop: '0.8rem',
                     borderTop: '1px solid var(--border-light)'
