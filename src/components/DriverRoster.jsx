@@ -7,9 +7,10 @@ import {
   RotateCcw,
   LayoutGrid,
   List,
-  ChevronRight,
   Truck,
-  UserCheck
+  MapPin,
+  Phone,
+  Eye
 } from 'lucide-react';
 
 export const DriverRoster = () => {
@@ -189,13 +190,20 @@ export const DriverRoster = () => {
         ) : viewMode === 'cards' ? (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
-            gap: '1rem'
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 290px), 1fr))',
+            gap: '1.15rem'
           }}>
             {filteredDrivers.map(d => {
               const clearedVehicles = getEmployeeVehiclesWithAccess(d, vehicles);
               const branch = branches.find(b => b.id === d.branchId);
-              const initials = d.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+              const initials = d.name
+                .replace(/^Engr\.\s+/i, '')
+                .split(' ')
+                .filter(Boolean)
+                .map(w => w[0])
+                .slice(0, 2)
+                .join('')
+                .toUpperCase();
 
               return (
                 <div
@@ -204,8 +212,8 @@ export const DriverRoster = () => {
                   style={{
                     background: 'var(--bg-surface)',
                     border: '1px solid var(--border-light)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '1rem',
+                    borderRadius: '14px',
+                    padding: '1.2rem',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
@@ -213,127 +221,224 @@ export const DriverRoster = () => {
                   }}
                 >
                   <div>
-                    {/* Header: Avatar, Name & Employee ID, Role & Category */}
-                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.75rem' }}>
+                    {/* Top Row: Avatar + Name + Category Pill + Title + ID Pill + Dept */}
+                    <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start', marginBottom: '0.95rem' }}>
                       <div style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '50%',
+                        width: '54px',
+                        height: '54px',
+                        borderRadius: '12px',
                         background: '#1E293B',
                         color: '#FFFFFF',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontWeight: 800,
-                        fontSize: '0.88rem',
+                        fontSize: '1.02rem',
+                        letterSpacing: '0.03em',
                         flexShrink: 0
                       }}>
                         {initials}
                       </div>
 
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.96rem', color: 'var(--text-main)', lineHeight: 1.2 }}>
-                          {d.name} <span className="mono" style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>&bull; {d.employeeId}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                          <strong style={{ fontSize: '1.02rem', fontWeight: 800, color: 'var(--text-main)', lineHeight: 1.2 }}>
+                            {d.name}
+                          </strong>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div
+                          style={{
+                            fontSize: '0.82rem',
+                            color: 'var(--text-secondary)',
+                            marginTop: '3px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                          title={d.title || d.role}
+                        >
                           {d.title || d.role}
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
-                          {d.department || 'Technical / Engineering'} &bull; {d.category}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginTop: '5px' }}>
+                          <span
+                            className="mono"
+                            style={{
+                              display: 'inline-block',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              color: 'var(--text-main)',
+                              background: 'var(--bg-surface-subtle)',
+                              border: '1px solid var(--border-light)',
+                              borderRadius: '5px',
+                              padding: '1px 7px'
+                            }}
+                          >
+                            {d.employeeId}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              color: 'var(--text-secondary)',
+                              background: 'var(--bg-surface-subtle)',
+                              border: '1px solid var(--border-light)',
+                              borderRadius: '5px',
+                              padding: '1px 6px'
+                            }}
+                          >
+                            {d.department || 'Technical / Engineering'}
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Compact, Non-Flashy Vehicles with Access Button (Head Access Control) */}
+                    {/* Vehicles with Access Chips Row (Matches Car Profiling's Authorized Chips Row) */}
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedDriver(d);
                         setModalType('employee-access');
                       }}
+                      title={`Manage vehicle access clearances for ${d.name}`}
                       style={{
-                        width: '100%',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '0.45rem 0.75rem',
-                        background: 'var(--bg-surface-subtle)',
-                        border: '1px solid var(--border-light)',
-                        borderRadius: '6px',
+                        gap: '0.45rem',
+                        flexWrap: 'wrap',
+                        background: 'transparent',
+                        border: 'none',
+                        padding: '0.15rem 0',
+                        marginBottom: '0.9rem',
                         cursor: 'pointer',
-                        marginBottom: '0.75rem',
-                        textAlign: 'left',
-                        transition: 'background 0.15s ease'
+                        textAlign: 'left'
                       }}
-                      className="vehicle-access-trigger-btn"
-                      title={`Manage vehicle access clearances for ${d.name}`}
                     >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                        <Truck size={14} color="var(--text-secondary)" />
-                        <span>Vehicles with Access ({clearedVehicles.length})</span>
-                      </span>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
-                        Manage <ChevronRight size={13} />
+                      {clearedVehicles.length > 0 ? (
+                        <>
+                          {clearedVehicles.slice(0, 2).map(v => (
+                            <span
+                              key={v.id}
+                              className="mono"
+                              style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                color: 'var(--text-main)',
+                                background: 'var(--bg-surface-subtle)',
+                                border: '1px solid var(--border-light)',
+                                borderRadius: '999px',
+                                padding: '2px 8px'
+                              }}
+                            >
+                              {v.code}
+                            </span>
+                          ))}
+                          {clearedVehicles.length > 2 && (
+                            <span
+                              style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 800,
+                                color: 'var(--text-secondary)',
+                                background: 'var(--bg-surface-subtle)',
+                                border: '1px solid var(--border-light)',
+                                borderRadius: '999px',
+                                padding: '2px 7px'
+                              }}
+                            >
+                              +{clearedVehicles.length - 2}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span
+                          style={{
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '50%',
+                            background: 'var(--bg-surface-subtle)',
+                            border: '1px dashed var(--border-medium)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            color: 'var(--text-tertiary)'
+                          }}
+                        >
+                          +
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          fontSize: '0.67rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.05em',
+                          textTransform: 'uppercase',
+                          color: 'var(--text-tertiary)'
+                        }}
+                      >
+                        VEHICLES WITH ACCESS ({clearedVehicles.length})
                       </span>
                     </button>
 
-                    {/* Compact, Subtle Neutral 2-Box Info Grid */}
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: '0.5rem',
-                      marginBottom: '0.85rem'
-                    }}>
-                      {/* Box 1: Station */}
-                      <div style={{
-                        background: 'var(--bg-surface-subtle)',
-                        border: '1px solid var(--border-light)',
-                        borderRadius: '6px',
-                        padding: '0.45rem 0.65rem'
-                      }}>
-                        <span style={{ display: 'block', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          STATION
-                        </span>
-                        <span style={{ fontSize: '0.79rem', fontWeight: 600, color: 'var(--text-main)', display: 'block', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {branch?.municipality || 'Central HQ'}
-                        </span>
+                    {/* Clean Icon-Led Info Rows (Matches Car Profiling) */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.95rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.55rem' }}>
+                        <MapPin size={14} color="var(--text-tertiary)" style={{ marginTop: '2px', flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            STATION
+                          </div>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                            {branch?.municipality ? `${branch.municipality} District` : 'Central HQ'}
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Box 2: Contact Phone */}
-                      <div style={{
-                        background: 'var(--bg-surface-subtle)',
-                        border: '1px solid var(--border-light)',
-                        borderRadius: '6px',
-                        padding: '0.45rem 0.65rem'
-                      }}>
-                        <span style={{ display: 'block', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          CONTACT PHONE
-                        </span>
-                        <span className="mono" style={{ fontSize: '0.79rem', fontWeight: 600, color: 'var(--text-main)', display: 'block', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {d.phone || '0919-550-2211'}
-                        </span>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.55rem' }}>
+                        <Phone size={14} color="var(--text-tertiary)" style={{ marginTop: '2px', flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            CONTACT PHONE
+                          </div>
+                          <div className="mono" style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                            {d.phone || '0919-550-2211'}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Card Footer Action */}
+                  {/* Card Footer: 2-Button Equal Grid (Matches Car Profiling) */}
                   <div style={{
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    paddingTop: '0.65rem',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '0.5rem',
+                    paddingTop: '0.8rem',
                     borderTop: '1px solid var(--border-light)'
                   }}>
                     <button
                       type="button"
                       className="btn btn-sm btn-outline"
-                      style={{ padding: '0.3rem 0.75rem', fontSize: '0.78rem' }}
+                      style={{ width: '100%', justifyContent: 'center', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700 }}
+                      onClick={() => {
+                        setSelectedDriver(d);
+                        setModalType('employee-access');
+                      }}
+                      title={`Manage vehicle clearances for ${d.name}`}
+                    >
+                      <Truck size={13} /> Access
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline"
+                      style={{ width: '100%', justifyContent: 'center', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700 }}
                       onClick={() => {
                         setSelectedDriver(d);
                         setModalType('driver-detail');
                       }}
                       title="Open full employee profile"
                     >
-                      View Profile
+                      <Eye size={13} /> View Profile
                     </button>
                   </div>
                 </div>

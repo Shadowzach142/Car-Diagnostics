@@ -128,10 +128,11 @@ export const EmployeeAccessModal = () => {
             {activeTab === 'authorized' && clearedVehicles.length > 0 && (
               <button
                 type="button"
-                className={`btn btn-xs ${isEditMode ? 'btn-primary' : 'btn-outline'}`}
+                className={`btn btn-sm ${isEditMode ? 'btn-primary' : 'btn-outline'}`}
                 style={{
+                  minHeight: '30px',
                   fontSize: '0.75rem',
-                  padding: '0.22rem 0.65rem',
+                  padding: '0.2rem 0.65rem',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '0.35rem',
@@ -168,7 +169,7 @@ export const EmployeeAccessModal = () => {
         </div>
 
         {/* Modal Body */}
-        <div className="modal-box-body" style={{ padding: '1.2rem 1.35rem', display: 'flex', flexDirection: 'column', gap: '0.85rem', maxHeight: '74vh', overflowY: 'auto' }}>
+        <div className="modal-box-body" style={{ padding: '1.15rem 1.35rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
           {/* Employee Identity Summary */}
           <div style={{
             display: 'flex',
@@ -212,7 +213,7 @@ export const EmployeeAccessModal = () => {
               borderRadius: '999px',
               flexShrink: 0
             }}>
-              {clearedVehicles.length} Vehicles Cleared
+              {clearedVehicles.length} {clearedVehicles.length === 1 ? 'Vehicle' : 'Vehicles'} Cleared
             </span>
           </div>
 
@@ -450,65 +451,60 @@ export const EmployeeAccessModal = () => {
             </>
           )}
 
-          {/* TAB 2: GRANT ACCESS DIRECTORY (High-Volume Search & Filter without Dropdowns) */}
+          {/* TAB 2: GRANT ACCESS DIRECTORY (Clean Search + Fixed Station Select) */}
           {activeTab === 'grant' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {/* Search Bar for High-Volume Fleet Data */}
-              <div style={{ position: 'relative' }}>
-                <Search
-                  size={15}
-                  color="var(--text-tertiary)"
-                  style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
-                />
-                <input
-                  type="text"
-                  className="form-input"
-                  style={{ paddingLeft: '32px', fontSize: '0.82rem', height: '34px' }}
-                  placeholder="Search available vehicles by code, plate, model, classification..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  autoFocus
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-tertiary)' }}
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-
-              {/* Branch Filter Chips for Quick Narrowing */}
-              <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto', paddingBottom: '2px' }}>
-                <button
-                  type="button"
-                  className={`btn btn-xs ${branchFilter === 'ALL' ? 'btn-primary' : 'btn-outline'}`}
-                  style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem', borderRadius: '999px', whiteSpace: 'nowrap' }}
-                  onClick={() => setBranchFilter('ALL')}
-                >
-                  All Stations ({unclearedVehicles.length})
-                </button>
-                {branches.map(b => {
-                  const count = unclearedVehicles.filter(v => v.branchId === b.id).length;
-                  if (count === 0) return null;
-                  return (
+              {/* Fixed-Height Search + Station Select Row (No Horizontal Scrollbar / Clipping) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem', alignItems: 'center' }}>
+                <div style={{ position: 'relative' }}>
+                  <Search
+                    size={15}
+                    color="var(--text-tertiary)"
+                    style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
+                  />
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ paddingLeft: '32px', paddingRight: searchQuery ? '28px' : '10px', fontSize: '0.82rem', height: '36px' }}
+                    placeholder="Search by code, plate, model..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    autoFocus
+                  />
+                  {searchQuery && (
                     <button
-                      key={b.id}
                       type="button"
-                      className={`btn btn-xs ${branchFilter === b.id ? 'btn-primary' : 'btn-outline'}`}
-                      style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem', borderRadius: '999px', whiteSpace: 'nowrap' }}
-                      onClick={() => setBranchFilter(b.id)}
+                      onClick={() => setSearchQuery('')}
+                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-tertiary)' }}
+                      aria-label="Clear search"
                     >
-                      {b.municipality} ({count})
+                      <X size={14} />
                     </button>
-                  );
-                })}
+                  )}
+                </div>
+
+                <select
+                  className="form-select"
+                  value={branchFilter}
+                  onChange={(e) => setBranchFilter(e.target.value)}
+                  style={{ height: '36px', fontSize: '0.8rem', minWidth: '155px' }}
+                  aria-label="Filter by station"
+                >
+                  <option value="ALL">All Stations ({unclearedVehicles.length})</option>
+                  {branches.map(b => {
+                    const count = unclearedVehicles.filter(v => v.branchId === b.id).length;
+                    if (count === 0) return null;
+                    return (
+                      <option key={b.id} value={b.id}>
+                        {b.municipality} ({count})
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
 
-              {/* Scrollable Scannable Cards (Full Info, No Truncation) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '42vh', overflowY: 'auto' }}>
+              {/* Scrollable Scannable Cards (Single Clean Scroll Container) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '340px', overflowY: 'auto', paddingRight: '2px' }}>
                 {filteredUncleared.length === 0 ? (
                   <div style={{
                     textAlign: 'center',
@@ -539,27 +535,27 @@ export const EmployeeAccessModal = () => {
                           padding: '0.65rem 0.85rem',
                           background: isJustGranted ? '#F0FDF4' : 'var(--bg-surface)',
                           border: isJustGranted ? '1.5px solid #86EFAC' : '1px solid var(--border-light)',
-                          borderRadius: '8px',
+                          borderRadius: '10px',
                           justifyContent: 'space-between',
                           transition: 'all 0.2s ease'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0, flex: 1 }}>
                           <img
                             src={vehPhoto}
                             alt={veh.code}
                             style={{
-                              width: '48px',
-                              height: '34px',
-                              borderRadius: '4px',
+                              width: '52px',
+                              height: '38px',
+                              borderRadius: '8px',
                               objectFit: 'cover',
-                              border: '1px solid var(--border-subtle)',
+                              border: '1px solid var(--border-light)',
                               flexShrink: 0
                             }}
                           />
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)', lineHeight: 1.2 }}>
-                              {veh.code} <span className="mono" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>&bull; {veh.plateNo}</span>
+                              {veh.code} <span className="mono" style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>&bull; {veh.plateNo}</span>
                             </div>
                             <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.35 }}>
                               {veh.makeModel} &bull; {veh.classification} &bull; {vehBranch?.municipality || 'District'}
@@ -575,9 +571,9 @@ export const EmployeeAccessModal = () => {
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '0.25rem',
-                            padding: '0.25rem 0.6rem',
+                            padding: '0.25rem 0.65rem',
                             background: '#DCFCE7',
-                            borderRadius: '4px',
+                            borderRadius: '6px',
                             flexShrink: 0
                           }}>
                             <CheckCircle2 size={13} /> Granted
@@ -585,13 +581,17 @@ export const EmployeeAccessModal = () => {
                         ) : (
                           <button
                             type="button"
-                            className="btn btn-sm btn-primary"
+                            className="btn btn-sm btn-outline"
                             style={{
+                              minHeight: '32px',
                               fontSize: '0.75rem',
+                              fontWeight: 700,
                               padding: '0.25rem 0.75rem',
+                              borderRadius: '8px',
+                              color: 'var(--text-main)',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '0.35rem',
+                              gap: '0.3rem',
                               flexShrink: 0,
                               whiteSpace: 'nowrap'
                             }}

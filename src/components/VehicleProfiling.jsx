@@ -1,41 +1,94 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useFleet } from '../context/FleetContext';
 import { getVehicleImage, getVehicleAuthorizedDrivers } from '../data/fleetData';
 import {
   Car,
-  Users,
   Plus,
   RotateCcw,
   LayoutGrid,
   List,
-  ChevronRight
+  MapPin,
+  Settings,
+  ShieldCheck,
+  AlertTriangle,
+  Activity
 } from 'lucide-react';
 
-const getTermYears = (startStr, endStr) => {
-  if (!startStr || !endStr) return '3 Years';
-  const s = new Date(startStr);
-  const e = new Date(endStr);
-  if (isNaN(s) || isNaN(e) || e <= s) return '3 Years';
-  const diffDays = Math.round((e - s) / (1000 * 60 * 60 * 24));
-  const years = Math.round(diffDays / 365.25);
-  if (years >= 1) {
-    return `${years} ${years === 1 ? 'Year' : 'Years'}`;
-  }
-  const months = Math.round(diffDays / 30.4);
-  if (months >= 1) return `${months} Mos`;
-  return `${diffDays} Days`;
+const getValidityState = (expiryStr) => {
+  if (!expiryStr) return { label: 'VALID', tone: 'valid' };
+  const exp = new Date(expiryStr);
+  if (isNaN(exp)) return { label: 'VALID', tone: 'valid' };
+  const now = new Date();
+  const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return { label: 'EXPIRED', tone: 'expired' };
+  if (diffDays <= 90) return { label: 'EXPIRING SOON', tone: 'expiring' };
+  return { label: 'VALID', tone: 'valid' };
+};
+
+const getInitials = (name) =>
+  (name || '')
+    .replace(/^Engr\.\s+/i, '')
+    .split(' ')
+    .filter(Boolean)
+    .map(w => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || 'OP';
+
+const ValidityPill = ({ state }) => {
+  const styles =
+    state.tone === 'expired'
+      ? { bg: '#FEF2F2', border: '#FECACA', color: '#DC2626', Icon: AlertTriangle }
+      : state.tone === 'expiring'
+      ? { bg: '#FFFBEB', border: '#FDE68A', color: '#B45309', Icon: AlertTriangle }
+      : { bg: '#ECFDF5', border: '#A7F3D0', color: '#059669', Icon: ShieldCheck };
+
+  const Icon = styles.Icon;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '0.3rem',
+        padding: '0.22rem 0.55rem',
+        borderRadius: '6px',
+        fontSize: '0.68rem',
+        fontWeight: 700,
+        letterSpacing: '0.03em',
+        background: styles.bg,
+        border: `1px solid ${styles.border}`,
+        color: styles.color
+      }}
+    >
+      <Icon size={12} />
+      {state.label}
+    </span>
+  );
 };
 
 export const VehicleProfiling = () => {
   const {
+    settings,
     editables = {},
     vehicles = [],
     drivers = [],
     branches = [],
+    workOrders = [],
     globalSearch,
+    setFocusedHealthVehicleId,
+    focusedProfileVehicleId,
+    setFocusedProfileVehicleId,
+    setActiveTab,
     setModalType,
     setSelectedVehicle
   } = useFleet();
+
+  const isMechanic = settings?.currentRole === 'MECHANIC';
+  const mechNameNorm = (settings?.currentMechanic || '').split(' (')[0].trim().toLowerCase();
+  const matchedDriver = useMemo(
+    () => drivers.find(d => (d.name || '').trim().toLowerCase() === mechNameNorm),
+    [drivers, mechNameNorm]
+  );
 
   const vehicleClassifications = editables.vehicleClassifications || [
     'Bucket Truck',
@@ -50,9 +103,41 @@ export const VehicleProfiling = () => {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'table'
 
-  // Filter logic
+  useEffect(() => {
+    if (!focusedProfileVehicleId) return;
+    setBranchFilter('ALL');
+    setCategoryFilter('ALL');
+    setViewMode('cards');
+    const scrollTimer = setTimeout(() => {
+      const el = document.getElementById(`profiling-card-${focusedProfileVehicleId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 60);
+    const clearTimer = setTimeout(() => {
+      setFocusedProfileVehicleId(null);
+    }, 2400);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
+  }, [focusedProfileVehicleId, setFocusedProfileVehicleId]);
+
   const filteredVehicles = useMemo(() => {
     let list = vehicles;
+
+    if (isMechanic) {
+      if (matchedDriver) {
+        list = list.filter(v => (v.authorizedDriverIds || []).includes(matchedDriver.id));
+      } else {
+        const orderVehicleCodes = new Set(
+          workOrders
+            .filter(wo => (wo.assignedMechanic || '').split(' (')[0].trim().toLowerCase() === mechNameNorm)
+            .map(wo => wo.vehicleCode)
+        );
+        list = list.filter(v => orderVehicleCodes.has(v.code));
+      }
+    }
 
     if (branchFilter !== 'ALL') {
       list = list.filter(v => v.branchId === branchFilter);
@@ -90,7 +175,7 @@ export const VehicleProfiling = () => {
 
   return (
     <div className="page">
-      {/* Zone 2: Page Toolbar */}
+      {/* Page Toolbar */}
       <div className="page-toolbar">
         <select
           className="form-select toolbar-select"
@@ -130,7 +215,7 @@ export const VehicleProfiling = () => {
 
         <span className="spacer" />
 
-        <span className="stat-chip">Assets <strong>{filteredVehicles.length}</strong></span>
+        <span className="stat-chip">ASSETS <strong>{filteredVehicles.length}</strong></span>
 
         <div className="segmented no-print" role="group" aria-label="View toggle">
           <button
@@ -163,7 +248,7 @@ export const VehicleProfiling = () => {
         </button>
       </div>
 
-      {/* Zone 3: Page Body */}
+      {/* Page Body */}
       <div className="page-body">
         {filteredVehicles.length === 0 ? (
           <div className="empty-state" style={{ padding: '3rem 1rem' }}>
@@ -174,25 +259,34 @@ export const VehicleProfiling = () => {
             </div>
           </div>
         ) : viewMode === 'cards' ? (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
-            gap: '1rem'
-          }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 290px), 1fr))',
+              gap: '1.15rem'
+            }}
+          >
             {filteredVehicles.map(v => {
               const authorizedDrivers = getVehicleAuthorizedDrivers(v, drivers);
               const branch = branches.find(b => b.id === v.branchId);
               const img = getVehicleImage(v);
+              const insState = getValidityState(v.insuranceExpiryDate);
+              const regState = getValidityState(v.registrationExpiryDate);
+              const specText =
+                v.specs?.reach && !v.specs.reach.startsWith('N/A')
+                  ? v.specs.reach
+                  : v.classification;
 
               return (
                 <div
                   key={v.id}
-                  className="data-card"
+                  id={`profiling-card-${v.id}`}
+                  className={`data-card ${focusedProfileVehicleId === v.id ? 'health-focus-pulse' : ''}`}
                   style={{
                     background: 'var(--bg-surface)',
                     border: '1px solid var(--border-light)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '1rem',
+                    borderRadius: '14px',
+                    padding: '1.2rem',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
@@ -200,163 +294,272 @@ export const VehicleProfiling = () => {
                   }}
                 >
                   <div>
-                    {/* Header: Photo thumbnail, Code & Plate, Model & Year */}
-                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.75rem' }}>
+                    {/* Top Row: Thumbnail + Code/Year + Model + Plate Pill */}
+                    <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start', marginBottom: '0.95rem' }}>
                       <img
                         src={img}
                         alt={v.code}
                         style={{
-                          width: '48px',
-                          height: '36px',
-                          borderRadius: '5px',
+                          width: '58px',
+                          height: '58px',
+                          borderRadius: '12px',
                           objectFit: 'cover',
-                          border: '1px solid var(--border-subtle)',
+                          border: '1px solid var(--border-light)',
+                          background: 'var(--bg-surface-subtle)',
                           flexShrink: 0
                         }}
                       />
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.94rem', color: 'var(--text-main)', lineHeight: 1.2 }}>
-                          {v.code} <span className="mono" style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>&bull; {v.plateNo}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                          <strong style={{ fontSize: '1.02rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                            {v.code}
+                          </strong>
+                          <span
+                            style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              color: 'var(--text-secondary)',
+                              background: 'var(--bg-surface-subtle)',
+                              border: '1px solid var(--border-light)',
+                              borderRadius: '5px',
+                              padding: '1px 6px'
+                            }}
+                          >
+                            {v.year}
+                          </span>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div
+                          style={{
+                            fontSize: '0.82rem',
+                            color: 'var(--text-secondary)',
+                            marginTop: '3px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                          title={v.makeModel}
+                        >
                           {v.makeModel}
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
-                          {v.classification} &bull; {v.year}
-                        </div>
+                        <span
+                          className="mono"
+                          style={{
+                            display: 'inline-block',
+                            marginTop: '5px',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            color: 'var(--text-main)',
+                            background: 'var(--bg-surface-subtle)',
+                            border: '1px solid var(--border-light)',
+                            borderRadius: '5px',
+                            padding: '1px 7px'
+                          }}
+                        >
+                          {v.plateNo}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Compact, Non-Flashy Employees with Access Button */}
+                    {/* Authorized Personnel Avatar Chips Row */}
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedVehicle(v);
                         setModalType('vehicle-access');
                       }}
+                      title={`Manage authorized personnel for ${v.code}`}
                       style={{
-                        width: '100%',
-                        display: 'flex',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '0.45rem 0.75rem',
-                        background: 'var(--bg-surface-subtle)',
-                        border: '1px solid var(--border-light)',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        marginBottom: '0.75rem',
-                        textAlign: 'left',
-                        transition: 'background 0.15s ease'
+                        gap: '0.55rem',
+                        background: 'transparent',
+                        border: 'none',
+                        padding: '0.15rem 0',
+                        marginBottom: '0.9rem',
+                        cursor: 'pointer'
                       }}
-                      className="vehicle-access-trigger-btn"
-                      title={`View employees with access to ${v.code}`}
                     >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                        <Users size={14} color="var(--text-secondary)" />
-                        <span>Employees with Access ({authorizedDrivers.length})</span>
-                      </span>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
-                        View <ChevronRight size={13} />
+                      {authorizedDrivers.length > 0 ? (
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          {authorizedDrivers.slice(0, 3).map((d, idx) => (
+                            <span
+                              key={d.id}
+                              title={d.name}
+                              style={{
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '50%',
+                                background: 'var(--bg-surface-subtle)',
+                                border: '1.5px solid var(--bg-surface)',
+                                boxShadow: '0 0 0 1px var(--border-light)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.62rem',
+                                fontWeight: 800,
+                                color: 'var(--text-main)',
+                                marginLeft: idx === 0 ? 0 : '-6px'
+                              }}
+                            >
+                              {getInitials(d.name)}
+                            </span>
+                          ))}
+                          {authorizedDrivers.length > 3 && (
+                            <span
+                              style={{
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '50%',
+                                background: 'var(--bg-surface-subtle)',
+                                border: '1.5px solid var(--bg-surface)',
+                                boxShadow: '0 0 0 1px var(--border-light)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.62rem',
+                                fontWeight: 800,
+                                color: 'var(--text-secondary)',
+                                marginLeft: '-6px'
+                              }}
+                            >
+                              +{authorizedDrivers.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span
+                          style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: 'var(--bg-surface-subtle)',
+                            border: '1px dashed var(--border-medium)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            color: 'var(--text-tertiary)'
+                          }}
+                        >
+                          +
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.05em',
+                          textTransform: 'uppercase',
+                          color: 'var(--text-tertiary)'
+                        }}
+                      >
+                        {authorizedDrivers.length > 0 ? 'AUTHORIZED' : 'NO AUTHORIZED'}
                       </span>
                     </button>
 
-                    {/* Compact, Subtle Neutral 4-Box Specification Grid */}
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: '0.5rem',
-                      marginBottom: '0.85rem'
-                    }}>
-                      {/* Box 1: Station */}
-                      <div style={{
-                        background: 'var(--bg-surface-subtle)',
-                        border: '1px solid var(--border-light)',
-                        borderRadius: '6px',
-                        padding: '0.45rem 0.65rem'
-                      }}>
-                        <span style={{ display: 'block', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          STATION
-                        </span>
-                        <span style={{ fontSize: '0.79rem', fontWeight: 600, color: 'var(--text-main)', display: 'block', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {branch?.municipality || 'Central HQ'}
-                        </span>
-                      </div>
-
-                      {/* Box 2: Spec / Class */}
-                      <div style={{
-                        background: 'var(--bg-surface-subtle)',
-                        border: '1px solid var(--border-light)',
-                        borderRadius: '6px',
-                        padding: '0.45rem 0.65rem'
-                      }}>
-                        <span style={{ display: 'block', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          SPEC / TYPE
-                        </span>
-                        <span style={{ fontSize: '0.79rem', fontWeight: 600, color: 'var(--text-main)', display: 'block', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {v.specs?.reach && !v.specs.reach.startsWith('N/A') ? v.specs.reach : v.classification}
-                        </span>
-                      </div>
-
-                      {/* Box 3: Insurance */}
-                      <div style={{
-                        background: 'var(--bg-surface-subtle)',
-                        border: '1px solid var(--border-light)',
-                        borderRadius: '6px',
-                        padding: '0.45rem 0.65rem'
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                            INSURANCE
-                          </span>
-                          <span style={{ fontSize: '0.64rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                            {getTermYears(v.insuranceAcquiredDate, v.insuranceExpiryDate)}
-                          </span>
+                    {/* Station & Spec Rows */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.95rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.55rem' }}>
+                        <MapPin size={14} color="var(--text-tertiary)" style={{ marginTop: '2px', flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            STATION
+                          </div>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                            {branch?.municipality ? `${branch.municipality} District` : 'Central HQ'}
+                          </div>
                         </div>
-                        <span className="mono" style={{ fontSize: '0.79rem', fontWeight: 600, color: 'var(--text-main)', display: 'block', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          Exp: {v.insuranceExpiryDate || '2026-10-20'}
-                        </span>
                       </div>
 
-                      {/* Box 4: Registration */}
-                      <div style={{
-                        background: 'var(--bg-surface-subtle)',
-                        border: '1px solid var(--border-light)',
-                        borderRadius: '6px',
-                        padding: '0.45rem 0.65rem'
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                            LTO REGISTRATION
-                          </span>
-                          <span style={{ fontSize: '0.64rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                            {getTermYears(v.registrationAcquiredDate, v.registrationExpiryDate)}
-                          </span>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.55rem' }}>
+                        <Settings size={14} color="var(--text-tertiary)" style={{ marginTop: '2px', flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            SPEC / TYPE
+                          </div>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {specText}
+                          </div>
                         </div>
-                        <span className="mono" style={{ fontSize: '0.79rem', fontWeight: 600, color: 'var(--text-main)', display: 'block', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          Exp: {v.registrationExpiryDate || '2026-10-23'}
-                        </span>
+                      </div>
+                    </div>
+
+                    {/* Validity Badges Row */}
+                    <div
+                      style={{
+                        borderTop: '1px solid var(--border-light)',
+                        paddingTop: '0.8rem',
+                        marginBottom: '0.95rem',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '0.5rem'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.3rem' }}>
+                          INSURANCE
+                        </div>
+                        <ValidityPill state={insState} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.3rem' }}>
+                          LTO REG
+                        </div>
+                        <ValidityPill state={regState} />
                       </div>
                     </div>
                   </div>
 
-                  {/* Card Footer Action */}
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    paddingTop: '0.65rem',
-                    borderTop: '1px solid var(--border-light)'
-                  }}>
+                  {/* Card Footer: View Profile & Car Health */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                     <button
                       type="button"
-                      className="btn btn-sm btn-outline"
-                      style={{ padding: '0.3rem 0.75rem', fontSize: '0.78rem' }}
                       onClick={() => {
                         setSelectedVehicle(v);
                         setModalType('vehicle-detail');
                       }}
-                      title="Open full vehicle specification profile"
+                      style={{
+                        width: '100%',
+                        padding: '0.55rem 0.65rem',
+                        borderRadius: '8px',
+                        background: 'var(--bg-surface-subtle)',
+                        border: '1px solid var(--border-light)',
+                        color: 'var(--text-main)',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                        transition: 'background 0.15s ease'
+                      }}
                     >
                       View Profile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFocusedHealthVehicleId(v.id);
+                        setActiveTab('health');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.55rem 0.65rem',
+                        borderRadius: '8px',
+                        background: 'var(--bg-surface-subtle)',
+                        border: '1px solid var(--border-light)',
+                        color: 'var(--text-main)',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.35rem',
+                        transition: 'background 0.15s ease'
+                      }}
+                      title={`View ${v.code} in Ongoing Health`}
+                    >
+                      <Activity size={13} /> Car Health
                     </button>
                   </div>
                 </div>
@@ -364,95 +567,99 @@ export const VehicleProfiling = () => {
             })}
           </div>
         ) : (
-          /* Table List View (Clean & Streamlined) */
-          <div className="table-wrap">
-            <table className="data-table" aria-label="COTELCO vehicle fleet profiling">
-              <thead>
-                <tr>
-                  <th>Vehicle Asset</th>
-                  <th>Model &amp; Classification</th>
-                  <th>Branch Station</th>
-                  <th>Employees with Access</th>
-                  <th>Insurance &amp; Registration</th>
-                  <th>Specifications</th>
-                  <th style={{ textAlign: 'right' }} className="no-print">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredVehicles.map(v => {
-                  const authorizedDrivers = getVehicleAuthorizedDrivers(v, drivers);
-                  const branch = branches.find(b => b.id === v.branchId);
-                  const img = getVehicleImage(v);
+          /* Table View */
+          <div className="card">
+            <div className="table-scroll">
+              <table className="data-table" aria-label="Car profiling table">
+                <thead>
+                  <tr>
+                    <th>Vehicle</th>
+                    <th>Classification</th>
+                    <th>Station</th>
+                    <th>Authorized</th>
+                    <th>Insurance</th>
+                    <th>LTO Reg</th>
+                    <th className="num">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredVehicles.map(v => {
+                    const authorizedDrivers = getVehicleAuthorizedDrivers(v, drivers);
+                    const branch = branches.find(b => b.id === v.branchId);
+                    const img = getVehicleImage(v);
+                    const insState = getValidityState(v.insuranceExpiryDate);
+                    const regState = getValidityState(v.registrationExpiryDate);
 
-                  return (
-                    <tr key={v.id}>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                          <img
-                            src={img}
-                            alt={v.code}
-                            style={{ width: '44px', height: '32px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}
-                          />
-                          <div>
-                            <strong className="mono" style={{ fontSize: '0.88rem' }}>{v.code}</strong>
-                            <span className="cell-sub mono">{v.plateNo}</span>
+                    return (
+                      <tr key={v.id}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                            <img
+                              src={img}
+                              alt={v.code}
+                              style={{
+                                width: '40px',
+                                height: '30px',
+                                borderRadius: '4px',
+                                objectFit: 'cover',
+                                border: '1px solid var(--border-subtle)',
+                                flexShrink: 0
+                              }}
+                            />
+                            <div>
+                              <div className="cell-primary">
+                                {v.code} <span className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>&bull; {v.plateNo}</span>
+                              </div>
+                              <div className="cell-sub">{v.makeModel} ({v.year})</div>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="cell-strong">{v.makeModel}</span>
-                        <span className="cell-sub">{v.classification} ({v.year})</span>
-                      </td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        {branch?.municipality || 'District Office'}
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn btn-xs btn-outline"
-                          onClick={() => {
-                            setSelectedVehicle(v);
-                            setModalType('vehicle-access');
-                          }}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}
-                        >
-                          <Users size={12} /> {authorizedDrivers.length} Authorized &bull; View
-                        </button>
-                      </td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-main)' }}>
-                          <span className="mono" style={{ fontSize: '0.78rem', color: 'var(--text-main)', fontWeight: 600 }}>
-                            Ins Exp: {v.insuranceExpiryDate || '2026-10-20'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-main)', marginTop: '2px' }}>
-                          <span className="mono" style={{ fontSize: '0.78rem', color: 'var(--text-main)', fontWeight: 600 }}>
-                            Reg Exp: {v.registrationExpiryDate || '2026-10-23'}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="cell-strong" style={{ fontSize: '0.8rem' }}>
-                          {v.specs?.reach || v.specs?.bucketCapacity || v.specs?.transmission || v.classification}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }} className="no-print">
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline"
-                          onClick={() => {
-                            setSelectedVehicle(v);
-                            setModalType('vehicle-detail');
-                          }}
-                        >
-                          View Profile
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td><span className="badge badge-muted">{v.classification}</span></td>
+                        <td>{branch?.municipality || 'Central HQ'}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline"
+                            onClick={() => {
+                              setSelectedVehicle(v);
+                              setModalType('vehicle-access');
+                            }}
+                          >
+                            {authorizedDrivers.length} Authorized
+                          </button>
+                        </td>
+                        <td><ValidityPill state={insState} /></td>
+                        <td><ValidityPill state={regState} /></td>
+                        <td className="num">
+                          <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline"
+                              onClick={() => {
+                                setGlobalSearch(v.code);
+                                setActiveTab('health');
+                              }}
+                            >
+                              <Activity size={13} /> Car Health
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline"
+                              onClick={() => {
+                                setSelectedVehicle(v);
+                                setModalType('vehicle-detail');
+                              }}
+                            >
+                              View Profile
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

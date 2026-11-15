@@ -323,6 +323,19 @@ When the company instructs the team to integrate with their MS SQL Server, the d
 - **Enterprise Section Naming**: Use concise terminology — e.g. `Recent Reports (X)` instead of `Recent Dispatches & Activity`.
 - Every grant and revocation automatically logs an append-only audit trail event in `FleetContext`.
 
+### Simplified Card & Tabbed Profile Pattern (Car Profiling & Across Tabs)
+- **Scannable Card Summary (`VehicleProfiling.jsx`)**:
+  - Cards display only essential top-level details without visual clutter: thumbnail, `Code` + `Year` pill, `Make/Model`, `Plate` pill, overlapping circular `AUTHORIZED` avatar chips (clickable to manage access), `STATION` & `SPEC / TYPE` rows, `INSURANCE` & `LTO REG` status pills (`VALID`, `EXPIRING SOON`, `EXPIRED`), and a single full-width `View Profile` button.
+- **4-Tab Vehicle Profile Modal (`VehicleDetailModal.jsx`)**:
+  - Clicking `View Profile` opens a fixed-height 4-tab modal so users can navigate directly to what they need without scrolling through a long wall of boxes:
+    1. **`Overview & Specs`**: Live status & usage (`Current Status`, `Odometer`, `Engine / PTO Hours`, `Fuel / Power`), technical/utility specifications, and insurance/registration validity summary.
+    2. **`Driver History`**: Currently authorized personnel (with `+ Manage Access` and `Revoke`) plus a chronological log of **past assigned drivers and trip dispatches** (`vehicle.driverHistory` + historical dispatches).
+    3. **`Maintenance`**: Both the **Vehicle Maintenance Checklist** (what still needs to be done, remaining km/due dates, and `+ Send to Maintenance`) and the **Complete Maintenance & Repair History** (all current and historical work orders and repair vouchers from prior years).
+    4. **`Paperwork & Registration`**: Active insurance and LTO OR/CR validity cards (editable via `Update / Log Renewal`) plus a multi-year **Registration & Insurance Renewal History** log (`vehicle.registrationHistory`).
+- **2-Role System (`DIRECTOR` vs. `MECHANIC`)**:
+  - **Operations Director (`DIRECTOR`)**: Full access across all tabs; cannot mark a maintenance work order as `Done` directly (clicking `Done` prompts to switch to the assigned mechanic).
+  - **Assigned Mechanic (`MECHANIC`)**: Visibility is strictly scoped to their own **Dashboard**, **Calendar** (`bookings` filtered to their maintenance jobs), **Maintenance** (`maintenance` filtered to their assigned work orders), and **My Profile** (`profile`). Only internal employees appear in the assigned mechanic lists.
+
 ---
 
 ## 4. Backend Transition Strategy (When Requested by User)

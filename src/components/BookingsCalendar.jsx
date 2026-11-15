@@ -15,8 +15,7 @@ import {
   FileText,
   Printer,
   Pencil,
-  Plus,
-  Info
+  Plus
 } from 'lucide-react';
 
 const HOURS = [
@@ -51,12 +50,17 @@ export const BookingsCalendar = () => {
     vehicles,
     branches,
     bookings,
+    workOrders = [],
+    settings,
     setSelectedVehicle,
     setSelectedBooking,
     setModalType,
     updateBooking,
     updateVehicle
   } = useFleet();
+
+  const isMechanic = settings?.currentRole === 'MECHANIC';
+  const mechShort = (settings?.currentMechanic || '').split(' (')[0].trim().toLowerCase();
 
   const [currentDate, setCurrentDate] = useState(INITIAL_DATE);
   const [viewMode, setViewMode] = useState('week'); // 'day', 'week', 'month'
@@ -300,7 +304,22 @@ export const BookingsCalendar = () => {
 
   // Filtered Bookings & Compliance Events
   const filteredBookings = useMemo(() => {
+    const myAssignedVehicleCodes = isMechanic
+      ? new Set(
+          workOrders
+            .filter(w => (w.assignedMechanic || '').split(' (')[0].trim().toLowerCase() === mechShort)
+            .map(w => w.vehicleCode)
+        )
+      : null;
+
     return allCalendarEvents.filter(b => {
+      if (isMechanic) {
+        if (b.type !== 'MAINTENANCE') return false;
+        const driverShort = (b.driver || '').split(' (')[0].trim().toLowerCase();
+        if (driverShort !== mechShort && !myAssignedVehicleCodes.has(b.vehicleCode)) {
+          return false;
+        }
+      }
       if (vehicleFilter !== 'ALL' && b.vehicleCode !== vehicleFilter && b.vehicleId !== vehicleFilter) {
         return false;
       }
@@ -312,7 +331,7 @@ export const BookingsCalendar = () => {
       }
       return true;
     });
-  }, [allCalendarEvents, vehicleFilter, typeFilter, branchFilter]);
+  }, [allCalendarEvents, vehicleFilter, typeFilter, branchFilter, isMechanic, mechShort, workOrders]);
 
   // Click on a booking or compliance record
   const handleBookingClick = (booking) => {
@@ -440,47 +459,45 @@ export const BookingsCalendar = () => {
 
         <span className="spacer" />
 
-        {/* Zone 1: Automated Feed Status & Page Actions */}
-        <span
-          className="stat-chip"
-          style={{
-            background: 'var(--ok-bg)',
-            color: 'var(--ok-text)',
-            border: '1px solid #86EFAC',
-            fontWeight: 700,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.35rem 0.65rem'
-          }}
-          title="Automated timeline: Trip dispatches and in-shop maintenance sync automatically from vehicle records."
-        >
-          <CheckCircle2 size={13} color="#16A34A" /> Automated Feed
+        <span className="stat-chip">
+          Schedules <strong>{filteredBookings.length}</strong>
         </span>
 
         <button
           type="button"
-          className="btn btn-outline no-print"
+          className="btn btn-sm btn-outline no-print"
           onClick={() => window.print()}
           title="Print official dispatch & maintenance schedule"
         >
-          <Printer size={15} /> Print Schedule
+          <Printer size={14} /> Print
         </button>
 
-        <button
-          type="button"
-          className="btn btn-primary no-print"
-          onClick={() => {
-            setSelectedBooking(null);
-            setModalType('new-booking');
-          }}
-        >
-          <Plus size={15} /> Add Schedule
-        </button>
+        {!isMechanic && (
+          <button
+            type="button"
+            className="btn btn-primary no-print"
+            onClick={() => {
+              setSelectedBooking(null);
+              setModalType('new-booking');
+            }}
+          >
+            <Plus size={15} /> Add Schedule
+          </button>
+        )}
       </div>
 
-      {/* Main Calendar Card */}
-      <div className="card calendar-container-card">
+      {/* Page Body */}
+      <div className="page-body">
+        {/* Main Calendar Card */}
+        <div
+          className="card calendar-container-card"
+          style={{
+            borderRadius: '14px',
+            border: '1px solid var(--border-light)',
+            boxShadow: 'var(--shadow-sm)',
+            overflow: 'hidden'
+          }}
+        >
         {/* Calendar Card Header */}
         <div className="calendar-card-header">
           <div className="calendar-header-left">
@@ -561,24 +578,35 @@ export const BookingsCalendar = () => {
           </div>
         )}
 
-        {/* Subtle Automated Sync & Drag Hint Banner */}
+        {/* Clean Legend & Schedule Hint Strip */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '0.5rem',
-          padding: '0.45rem 1.25rem',
+          gap: '0.65rem',
+          padding: '0.5rem 1.25rem',
           background: 'var(--bg-surface-subtle)',
-          borderBottom: '1px solid var(--border-subtle)',
-          fontSize: '0.78rem',
-          color: 'var(--text-muted)'
+          borderBottom: '1px solid var(--border-light)',
+          fontSize: '0.73rem',
+          color: 'var(--text-secondary)'
         }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-            <CheckCircle2 size={13} color="#16A34A" /> Automated schedule synced from vehicle dispatches, PMS, Insurance &amp; LTO Registration dates.
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-            <Info size={13} /> Tip: Drag and drop cards across days or hours to reschedule, or click any empty slot to schedule
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3B82F6' }} />
+              Trips &amp; Dispatches
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#F59E0B' }} />
+              Maintenance &amp; PMS
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }} />
+              Insurance &amp; LTO
+            </span>
+          </div>
+          <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>
+            Drag cards to reschedule or click an empty slot to add
           </span>
         </div>
 
@@ -965,6 +993,7 @@ export const BookingsCalendar = () => {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

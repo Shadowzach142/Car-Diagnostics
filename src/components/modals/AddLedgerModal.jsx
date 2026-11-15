@@ -1,72 +1,224 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useFleet } from '../../context/FleetContext';
-import { peso } from '../../utils/formatters';
-import { VehicleSelect } from '../common/VehicleSelect';
-import { X, Receipt, Building, Calendar, Wrench, FileText } from 'lucide-react';
+import { X, FileText, Upload, ScanText, Trash2 } from 'lucide-react';
+
+function formatFileSize(bytes) {
+  if (!bytes || Number.isNaN(bytes)) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export const AddLedgerModal = () => {
   const {
+    settings,
     modalType,
     setModalType,
-    vehicles,
+    vehicles = [],
+    drivers = [],
+    workOrders = [],
     selectedVehicle,
-    addLedgerEntry,
-    setActiveReceipt
+    addLedgerEntry
   } = useFleet();
 
+  const isMechanic = settings?.currentRole === 'MECHANIC';
+  const mechName = (settings?.currentMechanic || '').split(' (')[0].trim();
+  const mechNameNorm = mechName.toLowerCase();
+
+  const availableVehicles = useMemo(() => {
+    if (!isMechanic) return vehicles;
+    const matchedDriver = drivers.find(
+      (d) => (d.name || '').trim().toLowerCase() === mechNameNorm
+    );
+    if (matchedDriver) {
+      return vehicles.filter((v) =>
+        (v.authorizedDriverIds || []).includes(matchedDriver.id)
+      );
+    }
+    const orderCodes = new Set(
+      workOrders
+        .filter(
+          (wo) =>
+            (wo.assignedMechanic || '').split(' (')[0].trim().toLowerCase() ===
+            mechNameNorm
+        )
+        .map((wo) => wo.vehicleCode)
+    );
+    return vehicles.filter((v) => orderCodes.has(v.code));
+  }, [isMechanic, vehicles, drivers, workOrders, mechNameNorm]);
+
   const [vehicleCode, setVehicleCode] = useState('');
+  const [repairScope, setRepairScope] = useState('OUTSIDE');
   const [serviceType, setServiceType] = useState('');
   const [date, setDate] = useState(new Date().toISOString().substring(0, 10));
-  const [partsCost, setPartsCost] = useState(5000);
-  const [laborCost, setLaborCost] = useState(2500);
-  const [facility, setFacility] = useState('Central Motorpool & Testing Facility');
-  const [mechanic, setMechanic] = useState('Senior Motorpool Mechanic');
-  const [receiptId, setReceiptId] = useState('');
-  const [workOrderNo, setWorkOrderNo] = useState('');
+  const [facility, setFacility] = useState('');
+  const [mechanic, setMechanic] = useState('');
   const [serviceSummary, setServiceSummary] = useState('');
+  const [receiptImage, setReceiptImage] = useState(null);
+  const [attachedFile, setAttachedFile] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [ocrStatus, setOcrStatus] = useState('');
+  const receiptInputRef = useRef(null);
 
   useEffect(() => {
-    if (selectedVehicle) {
+    if (selectedVehicle && availableVehicles.some((v) => v.code === selectedVehicle.code)) {
       setVehicleCode(selectedVehicle.code);
-    } else if (vehicles.length > 0 && !vehicleCode) {
-      setVehicleCode(vehicles[0].code);
+    } else if (availableVehicles.length > 0 && !availableVehicles.some((v) => v.code === vehicleCode)) {
+      setVehicleCode(availableVehicles[0].code);
     }
-  }, [selectedVehicle, vehicles]);
+  }, [selectedVehicle, availableVehicles, vehicleCode]);
+
+  useEffect(() => {
+    if (modalType === 'add-ledger' && isMechanic) {
+      setMechanic(mechName);
+    }
+  }, [modalType, isMechanic, mechName]);
 
   if (modalType !== 'add-ledger') return null;
 
-  const totalCost = (Number(partsCost) || 0) + (Number(laborCost) || 0);
+  const handleFilePicked = (file) => {
+    if (!file) return;
+    setOcrStatus('');
+    const isImage = (file.type || '').startsWith('image/');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      if (typeof dataUrl !== 'string') return;
+
+      const baseTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]+/g, ' ');
+      if (!serviceType.trim()) setServiceType(baseTitle);
+
+      if (isImage) {
+        const img = new Image();
+        img.onload = () => {
+          const maxWidth = 1000;
+          const scale = img.width > maxWidth ? maxWidth / img.width : 1;
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext('2d');
+          const finalUrl = ctx
+            ? (ctx.drawImage(img, 0, 0, canvas.width, canvas.height),
+              canvas.toDataURL('image/jpeg', 0.85))
+            : dataUrl;
+          setReceiptImage(finalUrl);
+          setAttachedFile({
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            fileDataUrl: finalUrl,
+            isImage: true
+          });
+        };
+        img.onerror = () => {
+          setReceiptImage(dataUrl);
+          setAttachedFile({
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            fileDataUrl: dataUrl,
+            isImage: true
+          });
+        };
+        img.src = dataUrl;
+      } else {
+        setReceiptImage(null);
+        setAttachedFile({
+          fileName: file.name,
+          fileType: file.type || 'application/octet-stream',
+          fileSize: file.size,
+          fileDataUrl: dataUrl,
+          isImage: false
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleReceiptPhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) handleFilePicked(file);
+    e.target.value = '';
+  };
+
+  const handleRunOcr = async () => {
+    if (!receiptImage) return;
+    if (typeof window !== 'undefined' && 'TextDetector' in window) {
+      try {
+        setOcrStatus('Scanning document text...');
+        const img = new Image();
+        img.src = receiptImage;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+        const detector = new window.TextDetector();
+        const blocks = await detector.detect(img);
+        const fullText = blocks.map((b) => b.rawValue).join('\n');
+        if (!fullText.trim()) {
+          setOcrStatus('No readable text detected — photo is still attached.');
+          return;
+        }
+        const dateMatch = fullText.match(/\b(20\d{2}[-/]\d{2}[-/]\d{2})\b/);
+        if (dateMatch) setDate(dateMatch[1].replace(/\//g, '-'));
+        setServiceSummary((prev) => (prev ? prev : fullText.slice(0, 300)));
+        setOcrStatus('OCR extracted text from photo.');
+      } catch {
+        setOcrStatus('Photo attached for report.');
+      }
+    } else {
+      setOcrStatus('Photo attached for report.');
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!serviceType.trim()) return;
+    if (!serviceType.trim() || !vehicleCode) return;
 
-    const voucher = addLedgerEntry({
+    const defaultFacility = isMechanic
+      ? 'Field / Driver Submission'
+      : repairScope === 'OUTSIDE'
+      ? 'Authorized Outside Service Shop'
+      : 'Central Motorpool & Testing Facility';
+
+    const ok = addLedgerEntry({
       vehicleCode,
+      repairScope: isMechanic ? 'OUTSIDE' : repairScope,
+      receiptImage,
+      fileName: attachedFile?.fileName || null,
+      fileType: attachedFile?.fileType || null,
+      fileSize: attachedFile?.fileSize || null,
+      fileDataUrl: attachedFile?.fileDataUrl || null,
       serviceType: serviceType.trim(),
       date,
-      partsCost: Number(partsCost) || 0,
-      laborCost: Number(laborCost) || 0,
-      facility: facility.trim() || 'Central Motorpool & Testing Facility',
-      mechanic: mechanic.trim() || 'Senior Motorpool Mechanic',
-      receiptId: receiptId.trim() || undefined,
-      workOrderNo: workOrderNo.trim() || undefined,
+      partsCost: 0,
+      laborCost: 0,
+      facility: facility.trim() || defaultFacility,
+      mechanic:
+        (isMechanic ? mechName : mechanic.trim()) ||
+        (repairScope === 'OUTSIDE' ? 'Outside Shop Technician' : 'Senior Motorpool Mechanic'),
       serviceSummary: serviceSummary.trim() || serviceType.trim()
     });
 
-    if (voucher) {
-      setActiveReceipt(voucher);
-      setModalType('receipt-voucher');
+    if (ok) {
+      setServiceType('');
+      setFacility('');
+      if (!isMechanic) setMechanic('');
+      setServiceSummary('');
+      setReceiptImage(null);
+      setAttachedFile(null);
+      setOcrStatus('');
+      setModalType(null);
     }
   };
 
   return (
     <div className="modal-overlay" onClick={() => setModalType(null)}>
-      <div className="modal-box" style={{ maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal-box" style={{ maxWidth: '540px' }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-box-header">
           <div className="modal-box-title">
-            <Receipt size={20} color="var(--primary)" />
-            <span>Record Expense Voucher</span>
+            <FileText size={19} color="var(--primary)" />
+            <span>Add Report</span>
           </div>
           <button
             type="button"
@@ -79,39 +231,168 @@ export const AddLedgerModal = () => {
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="modal-box-body" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: '1.25rem' }}>
-              Record audited repair expense voucher.
-            </p>
-
-            <VehicleSelect
-              vehicles={vehicles}
-              value={vehicleCode}
-              onChange={(val) => setVehicleCode(val)}
-              label="Select Vehicle: *"
-              valueKey="code"
-            />
-
-            <div className="form-group" style={{ marginBottom: '1rem' }}>
-              <label className="form-label">
-                Service / Expense Description: *
-              </label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="e.g. Hydraulic arm hose replacement & dielectric oil flush"
-                value={serviceType}
-                onChange={(e) => setServiceType(e.target.value)}
+          <div className="modal-box-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', maxHeight: '72vh', overflowY: 'auto' }}>
+            {/* Vehicle Picker (Scoped to Authorized Vehicle(s) for Mechanic) */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Vehicle *</label>
+              <select
+                className="form-select"
+                value={vehicleCode}
+                onChange={(e) => setVehicleCode(e.target.value)}
                 required
-              />
+              >
+                {availableVehicles.length === 0 ? (
+                  <option value="">No authorized vehicles available</option>
+                ) : (
+                  availableVehicles.map((v) => (
+                    <option key={v.id} value={v.code}>
+                      {v.code} &bull; {v.plateNo} ({v.makeModel})
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">
-                  <Calendar size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
-                  Expense Date: *
-                </label>
+            {/* Drag & Drop Report File or Photo */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Attach Report File or Photo (Optional)</label>
+              <input
+                ref={receiptInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,image/*"
+                onChange={handleReceiptPhotoChange}
+                style={{ display: 'none' }}
+              />
+              {!attachedFile ? (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const file = e.dataTransfer?.files?.[0];
+                    if (file) handleFilePicked(file);
+                  }}
+                  onClick={() => receiptInputRef.current?.click()}
+                  style={{
+                    width: '100%',
+                    padding: '0.9rem 1rem',
+                    borderRadius: '8px',
+                    border: isDragging ? '1.5px dashed #84CC16' : '1px dashed var(--border-medium)',
+                    background: isDragging ? '#F7FDE8' : 'var(--bg-surface-subtle)',
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.2rem',
+                    textAlign: 'center'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                    <Upload size={15} /> Drag &amp; drop a file here, or click to browse
+                  </div>
+                  <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+                    Word (.docx, .doc), PDF (.pdf), Excel, text, or photo
+                  </div>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    border: '1px solid var(--border-light)',
+                    borderRadius: '8px',
+                    padding: '0.6rem 0.75rem',
+                    background: 'var(--bg-surface-subtle)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '0.75rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                    {receiptImage ? (
+                      <img
+                        src={receiptImage}
+                        alt="Attached report"
+                        style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border-light)', flexShrink: 0 }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '6px',
+                          background: '#fff',
+                          border: '1px solid var(--border-light)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--text-secondary)',
+                          flexShrink: 0
+                        }}
+                      >
+                        <FileText size={18} />
+                      </div>
+                    )}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {attachedFile.fileName}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                        {ocrStatus || formatFileSize(attachedFile.fileSize)}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
+                    {receiptImage && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline"
+                        onClick={handleRunOcr}
+                        title="Extract text or date from photo"
+                      >
+                        <ScanText size={13} /> OCR
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline"
+                      onClick={() => {
+                        setReceiptImage(null);
+                        setAttachedFile(null);
+                        setOcrStatus('');
+                      }}
+                      title="Remove attachment"
+                      style={{ color: '#DC2626', borderColor: '#FECACA' }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Title + Date */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 155px', gap: '0.75rem' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Report Title *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Tire Check / Incident Report"
+                  value={serviceType}
+                  onChange={(e) => setServiceType(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Date *</label>
                 <input
                   type="date"
                   className="form-input"
@@ -120,119 +401,55 @@ export const AddLedgerModal = () => {
                   required
                 />
               </div>
+            </div>
 
-              <div className="form-group">
-                <label className="form-label">
-                  <Wrench size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
-                  Assigned Technician:
-                </label>
+            {/* Director-only Facility / Source fields */}
+            {!isMechanic && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Source</label>
+                  <select
+                    className="form-select"
+                    value={repairScope}
+                    onChange={(e) => setRepairScope(e.target.value)}
+                  >
+                    <option value="OUTSIDE">Outside Repair Shop</option>
+                    <option value="IN_HOUSE">In-House Motorpool</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Submitted By</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={mechanic}
+                    onChange={(e) => setMechanic(e.target.value)}
+                    placeholder="Driver or technician name"
+                  />
+                </div>
+              </div>
+            )}
+
+            {!isMechanic && (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Facility / Shop</label>
                 <input
                   type="text"
                   className="form-input"
-                  value={mechanic}
-                  onChange={(e) => setMechanic(e.target.value)}
-                  placeholder="e.g. Senior Motorpool Mechanic"
+                  value={facility}
+                  onChange={(e) => setFacility(e.target.value)}
+                  placeholder={repairScope === 'OUTSIDE' ? 'Outside repair shop name' : 'Central Motorpool'}
                 />
               </div>
-            </div>
+            )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">
-                  Parts Cost (₱ PHP): *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="50"
-                  className="form-input"
-                  value={partsCost}
-                  onChange={(e) => setPartsCost(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
-                  Labor Cost (₱ PHP): *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="50"
-                  className="form-input"
-                  value={laborCost}
-                  onChange={(e) => setLaborCost(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            <div style={{
-              background: 'var(--bg-surface-subtle)',
-              border: '1px solid var(--border-light)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '0.75rem 1rem',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '1rem'
-            }}>
-              <span style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>Audited Voucher Total:</span>
-              <strong style={{ fontSize: '1.15rem', color: 'var(--text-primary)' }}>{peso(totalCost)} PHP</strong>
-            </div>
-
-            <div className="form-group" style={{ marginBottom: '1rem' }}>
-              <label className="form-label">
-                <Building size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
-                Service Facility / Motorpool:
-              </label>
-              <input
-                type="text"
-                className="form-input"
-                value={facility}
-                onChange={(e) => setFacility(e.target.value)}
-                placeholder="Central Motorpool & Testing Facility"
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginBottom: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">
-                  Receipt / Invoice No. (Optional):
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Auto-generated if blank"
-                  value={receiptId}
-                  onChange={(e) => setReceiptId(e.target.value)}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
-                  Work Order Ref (Optional):
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Auto-generated if blank"
-                  value={workOrderNo}
-                  onChange={(e) => setWorkOrderNo(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-              <label className="form-label">
-                <FileText size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
-                Detailed Scope &amp; Parts Breakdown:
-              </label>
+            {/* Notes */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Notes</label>
               <textarea
                 className="form-input"
                 rows="3"
-                placeholder="Itemized parts, diagnostic observations, test results..."
+                placeholder="Write details or summary of the report..."
                 value={serviceSummary}
                 onChange={(e) => setServiceSummary(e.target.value)}
               />
@@ -247,11 +464,8 @@ export const AddLedgerModal = () => {
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-            >
-              Record Voucher
+            <button type="submit" className="btn btn-primary" disabled={!vehicleCode}>
+              Save Report
             </button>
           </div>
         </form>
@@ -259,4 +473,3 @@ export const AddLedgerModal = () => {
     </div>
   );
 };
-

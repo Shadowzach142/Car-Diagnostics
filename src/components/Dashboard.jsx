@@ -1,6 +1,6 @@
 import React from 'react';
 import { useFleet } from '../context/FleetContext';
-import { getVehicleImage } from '../data/fleetData';
+import { getVehicleImage, WORK_ORDER_STAGES } from '../data/fleetData';
 import { parseVehicleAlert } from '../utils/formatters';
 import {
   Truck,
@@ -8,7 +8,9 @@ import {
   Wrench,
   ClipboardList,
   Search,
-  AlertTriangle
+  AlertTriangle,
+  Clock,
+  ArrowRight
 } from 'lucide-react';
 
 const COMPLETED = 'Completed / Released';
@@ -36,8 +38,172 @@ export const Dashboard = () => {
     branches,
     workOrders,
     setSelectedVehicle,
-    setModalType
+    setModalType,
+    settings,
+    updateWorkOrderStage,
+    setActiveTab
   } = useFleet();
+
+  const isMechanic = settings?.currentRole === 'MECHANIC';
+  const mechFull = settings?.currentMechanic || '';
+  const mechShort = mechFull.split(' (')[0].trim();
+  const mechNorm = mechShort.toLowerCase();
+
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  if (isMechanic) {
+    const myOrders = workOrders.filter(
+      wo => (wo.assignedMechanic || '').split(' (')[0].trim().toLowerCase() === mechNorm
+    );
+    const myActive = myOrders.filter(wo => wo.status !== COMPLETED);
+    const myDone = myOrders.filter(wo => wo.status === COMPLETED);
+    const inProgressCount = myActive.filter(wo => {
+      const stage = wo.currentStage || 'Active Repair / Servicing';
+      return stage === 'Diagnosing' || stage === 'Active Repair / Servicing';
+    }).length;
+    const queuedOrPartsCount = myActive.length - inProgressCount;
+
+    return (
+      <div className="dashboard-single-screen">
+        <div className="dash-actions">
+          <span className="dash-date">{today}</span>
+          <div className="dash-actions-right">
+            <span className="stat-chip">{mechShort || 'Assigned Mechanic'}</span>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setActiveTab('maintenance')}
+            >
+              <Wrench size={14} /> Open Maintenance
+            </button>
+          </div>
+        </div>
+
+        <div className="kpi-grid">
+          <Kpi icon={ClipboardList} tone="lime" label="Assigned to me" value={myActive.length} note="Open maintenance jobs" />
+          <Kpi icon={Wrench} tone="warn" label="In progress" value={inProgressCount} note="Diagnosing / active repair" />
+          <Kpi icon={Clock} tone="neutral" label="Queued / parts" value={queuedOrPartsCount} note="Inspection, parts, or QC" />
+          <Kpi icon={CheckCircle2} tone="ok" label="Completed by me" value={myDone.length} note="Released work orders" />
+        </div>
+
+        <div className="dash-grid">
+          <section className="card dash-panel span-2" aria-labelledby="mech-queue-title">
+            <div className="card-head">
+              <div>
+                <h2 className="card-title" id="mech-queue-title">My assigned maintenance queue</h2>
+                <div className="card-sub">
+                  {myActive.length} active {myActive.length === 1 ? 'vehicle' : 'vehicles'} assigned to {mechShort}
+                </div>
+              </div>
+            </div>
+
+            <div className="alert-list">
+              {myActive.length === 0 && (
+                <div className="empty-state">
+                  <CheckCircle2 size={28} color="#16A34A" />
+                  <strong>No pending vehicles assigned to you</strong>
+                </div>
+              )}
+              {myActive.map(wo => {
+                const v = vehicles.find(veh => veh.code === wo.vehicleCode);
+                const branch = branches.find(b => b.id === (wo.branchId || v?.branchId));
+                const stage = wo.currentStage || 'Active Repair / Servicing';
+
+                return (
+                  <div key={wo.id} className="alert-row" style={{ gap: '12px' }}>
+                    <div style={{
+                      width: '42px',
+                      height: '30px',
+                      borderRadius: '6px',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      background: '#E5E7EB',
+                      border: '1px solid var(--border-subtle)'
+                    }}>
+                      {v && (
+                        <img
+                          src={getVehicleImage(v)}
+                          alt={wo.vehicleCode}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      )}
+                    </div>
+
+                    <div className="alert-main" style={{ flex: 1, minWidth: 0 }}>
+                      <div className="alert-top">
+                        <strong>{wo.vehicleCode}</strong>
+                        <span className="muted">· {wo.plateNo || v?.plateNo || '—'}</span>
+                        {branch && <span className="badge badge-muted">{branch.name}</span>}
+                      </div>
+                      <div className="alert-sub">
+                        {wo.type}
+                        {wo.notes ? ` — ${wo.notes}` : ''}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm btn-go-maintenance"
+                        onClick={() => setActiveTab('maintenance')}
+                      >
+                        Go to Maintenance
+                        <ArrowRight size={14} className="btn-go-arrow" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="card dash-panel" aria-labelledby="mech-done-title">
+            <div className="card-head">
+              <div>
+                <h2 className="card-title" id="mech-done-title">Completed by me</h2>
+                <div className="card-sub">{myDone.length} released maintenance records</div>
+              </div>
+            </div>
+
+            <div className="alert-list">
+              {myDone.length === 0 && (
+                <div className="empty-state">
+                  <Wrench size={24} />
+                  <strong>No completed jobs yet</strong>
+                </div>
+              )}
+              {myDone.map(wo => (
+                <div key={wo.id} className="alert-row" style={{ gap: '10px' }}>
+                  <div className="alert-main" style={{ flex: 1, minWidth: 0 }}>
+                    <div className="alert-top">
+                      <strong>{wo.vehicleCode}</strong>
+                      <span className="badge badge-ok">Completed</span>
+                    </div>
+                    <div className="alert-sub">
+                      {wo.type} · {wo.dateCompleted || wo.dateReported}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => updateWorkOrderStage(wo.id, 'Active Repair / Servicing')}
+                  >
+                    Re-open
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   const total = vehicles.length;
   const count = (s) => vehicles.filter(v => v.status === s).length;
@@ -80,10 +246,6 @@ export const Dashboard = () => {
     })
     .sort((a, b) => b.total - a.total);
   const maxBranch = Math.max(1, ...branchRows.map(b => b.total));
-
-  const today = new Date().toLocaleDateString(undefined, {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  });
 
   // Simplify long alert text to short scannable phrase
   const formatShortAlert = (alertStr, statusReason) => {

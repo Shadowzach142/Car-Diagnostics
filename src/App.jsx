@@ -3,13 +3,12 @@ import { FleetProvider, useFleet } from './context/FleetContext';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { Dashboard } from './components/Dashboard';
-import { FleetDirectory } from './components/FleetDirectory';
 import { OngoingHealth } from './components/OngoingHealth';
 import { MaintenanceHub } from './components/MaintenanceHub';
-import { MapView } from './components/MapView';
 import { RepairArchive } from './components/RepairArchive';
 import { SecurityAudit } from './components/SecurityAudit';
 import { EditablesConfig } from './components/EditablesConfig';
+import { MechanicProfile } from './components/MechanicProfile';
 
 import { VehicleDetailModal } from './components/modals/VehicleDetailModal';
 import { ReassignModal } from './components/modals/ReassignModal';
@@ -30,7 +29,12 @@ import { VehicleAccessModal } from './components/modals/VehicleAccessModal';
 import { EmployeeAccessModal } from './components/modals/EmployeeAccessModal';
 
 const AppContent = () => {
-  const { activeTab } = useFleet();
+  const { activeTab, settings } = useFleet();
+  const isMechanic = settings?.currentRole === 'MECHANIC';
+  const mechanicAllowedTabs = ['dashboard', 'profiling', 'bookings', 'health', 'maintenance', 'auditing', 'profile'];
+  const effectiveTab = isMechanic && !mechanicAllowedTabs.includes(activeTab)
+    ? 'dashboard'
+    : activeTab;
 
   return (
     <div className="modern-layout-container">
@@ -40,17 +44,18 @@ const AppContent = () => {
         <TopBar />
 
         <main className="main-viewport-canvas" id="main-content" tabIndex={-1}>
-          {activeTab === 'dashboard' && <Dashboard />}
-          {activeTab === 'directory' && <FleetDirectory />}
-          {activeTab === 'profiling' && <VehicleProfiling />}
-          {activeTab === 'drivers' && <DriverRoster />}
-          {activeTab === 'bookings' && <BookingsCalendar />}
-          {activeTab === 'health' && <OngoingHealth />}
-          {activeTab === 'maintenance' && <MaintenanceHub />}
-          {activeTab === 'map-view' && <MapView />}
-          {activeTab === 'auditing' && <RepairArchive />}
-          {activeTab === 'editables' && <EditablesConfig />}
-          {activeTab === 'governance' && <SecurityAudit />}
+          <div key={effectiveTab} className="tab-page-enter">
+            {effectiveTab === 'dashboard' && <Dashboard />}
+            {effectiveTab === 'profiling' && <VehicleProfiling />}
+            {effectiveTab === 'drivers' && <DriverRoster />}
+            {effectiveTab === 'bookings' && <BookingsCalendar />}
+            {effectiveTab === 'health' && <OngoingHealth />}
+            {effectiveTab === 'maintenance' && <MaintenanceHub />}
+            {effectiveTab === 'auditing' && <RepairArchive />}
+            {effectiveTab === 'editables' && <EditablesConfig />}
+            {effectiveTab === 'governance' && <SecurityAudit />}
+            {effectiveTab === 'profile' && <MechanicProfile />}
+          </div>
         </main>
       </div>
 

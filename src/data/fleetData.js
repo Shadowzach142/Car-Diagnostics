@@ -91,8 +91,9 @@ export const DEFAULT_EDITABLES = {
       "Two-Way Dispatch Radio & GPS Transponder Check"
     ],
     "Tires & Alignment": [
+      "Tire Replacement & Wheel Alignment (Scheduled)",
+      "Tire Replacement & Wheel Alignment (External Appearance / Wear)",
       "Computerized 4-Wheel Laser Alignment",
-      "All-Terrain Utility Tire Replacement & Balancing",
       "Heavy Truck Dual-Wheel Rotation & Lug Torque Check",
       "Spare Tire Carrier & Sidewall Puncture Repair"
     ],
@@ -113,15 +114,13 @@ export const DEFAULT_EDITABLES = {
     "Rogelio D. Bautista (Senior Heavy Hydraulics & Boom Mechanic)",
     "Ernesto C. Solis (Master Diesel & Drivetrain Technician)",
     "Jerome P. Navarro (Automotive Electrical & OBD-II Specialist)",
-    "Dante M. Soriano (Brake, Suspension & Chassis Specialist)",
-    "Isuzu Gencars Certified Service Team (Outside Facility)",
-    "Toyota Commercial Fleet Service Team (Outside Facility)",
-    "Mitsubishi Motors Mindanao Workshop Team (Outside Facility)"
+    "Dante M. Soriano (Brake, Suspension & Chassis Specialist)"
   ],
   diagnosticTypes: [
     "Engine Oil & Filter Change",
     "Brake Pads & Fluid Check",
-    "Tire Rotation & Alignment",
+    "Tire Replacement",
+    "External Tire Appearance Check",
     "Hydraulic Boom & Outrigger Fluid",
     "Dielectric High-Pot Safety Test",
     "Battery & Alternator Health",
@@ -142,19 +141,42 @@ export const WORK_ORDER_STAGES = [
 
 export const buildDefaultVehicleDiagnostics = (v) => {
   const odo = Number(v?.odometerKm) || 20000;
+  const code = String(v?.code || '').toUpperCase();
   const c = String(v?.classification || '').toLowerCase();
   const isBoom = c.includes('bucket') || c.includes('truck');
   const isBike = c.includes('motorcycle');
+  const isOfficeCar = c.includes('van') || c.includes('sedan') || c.includes('car') || c.includes('suv');
+
+  // Staggered maintenance cycles across default fleet so dashboard reflects a realistic live cycle
+  const cycleByCode = {
+    'FLT-BT-01': { oilLeft: 1100, brkLeft: 4200, dielDate: '2026-12-15', tireDate: '2027-01-10' },
+    'FLT-DD-01': { oilLeft: 4200, brkLeft: 7400, dielDate: '2027-02-20', tireDate: '2027-02-20' },
+    'FLT-PU-01': { oilLeft: -350, brkLeft: 2100, tireDate: '2026-11-28' },
+    'FLT-PU-02': { oilLeft: 3100, brkLeft: 950, tireDate: '2027-01-15' },
+    'FLT-ER-01': { oilLeft: 4600, brkLeft: 8600, tireDate: '2027-04-10' },
+    'FLT-MC-01': { oilLeft: 850, brkLeft: 3400, tireDate: '2027-01-20' }
+  };
+
+  const preset = cycleByCode[code] || {
+    oilLeft: isBike ? 1800 : 3500,
+    brkLeft: 6500,
+    dielDate: '2027-01-15',
+    tireDate: isOfficeCar ? '2027-04-10' : '2027-01-10'
+  };
+
+  const oilInterval = isBike ? 3000 : 5000;
+  const brkInterval = 10000;
 
   const items = [
     {
       id: `DIAG-${v?.id || 'VEH'}-OIL`,
       type: "Engine Oil & Filter Change",
       trackMode: "BOTH", // 'KM' | 'DATE' | 'BOTH'
-      lastDoneKm: Math.max(0, odo - (isBike ? 2100 : 3800)),
-      intervalKm: isBike ? 3000 : 5000,
-      targetKm: odo + (isBike ? 900 : 1200),
+      lastDoneKm: Math.max(0, odo + preset.oilLeft - oilInterval),
+      intervalKm: oilInterval,
+      targetKm: odo + preset.oilLeft,
       lastDoneDate: v?.lastServiceDate || "2026-08-20",
+      intervalMonths: 3,
       targetDate: v?.nextServiceDueDate || "2026-11-25",
       assignedPerson: isBoom
         ? "Rogelio D. Bautista (Senior Heavy Hydraulics & Boom Mechanic)"
@@ -165,10 +187,11 @@ export const buildDefaultVehicleDiagnostics = (v) => {
       id: `DIAG-${v?.id || 'VEH'}-BRK`,
       type: "Brake Pads & Fluid Check",
       trackMode: "KM",
-      lastDoneKm: Math.max(0, odo - 6500),
-      intervalKm: 10000,
-      targetKm: odo + 3500,
+      lastDoneKm: Math.max(0, odo + preset.brkLeft - brkInterval),
+      intervalKm: brkInterval,
+      targetKm: odo + preset.brkLeft,
       lastDoneDate: v?.lastServiceDate || "2026-08-20",
+      intervalMonths: 6,
       targetDate: "2027-02-15",
       assignedPerson: "Dante M. Soriano (Brake, Suspension & Chassis Specialist)",
       notes: "Front/rear lining thickness & hydraulic brake pressure"
@@ -184,22 +207,26 @@ export const buildDefaultVehicleDiagnostics = (v) => {
       intervalKm: 15000,
       targetKm: odo + 15000,
       lastDoneDate: "2026-06-15",
-      targetDate: "2026-12-15",
+      intervalMonths: 6,
+      targetDate: preset.dielDate || "2026-12-15",
       assignedPerson: "Engr. Mateo R. Villanueva (Lead Fleet Diagnostic Specialist)",
       notes: "46kV insulation & hydraulic outrigger seal check"
     });
   } else {
     items.push({
       id: `DIAG-${v?.id || 'VEH'}-TIRE`,
-      type: "Tire Rotation & Alignment",
-      trackMode: "KM",
-      lastDoneKm: Math.max(0, odo - 7200),
+      type: "Tire Replacement",
+      trackMode: "DATE",
+      lastDoneKm: Math.max(0, odo - 4200),
       intervalKm: 10000,
-      targetKm: odo + 2800,
+      targetKm: odo + 5800,
       lastDoneDate: "2026-07-10",
-      targetDate: "2027-01-10",
+      intervalMonths: isOfficeCar ? 9 : 6,
+      targetDate: preset.tireDate || (isOfficeCar ? "2027-04-10" : "2027-01-10"),
       assignedPerson: "Dante M. Soriano (Brake, Suspension & Chassis Specialist)",
-      notes: "Tread depth & 4-wheel alignment"
+      notes: isOfficeCar
+        ? "Office car: replace every 9 months (or earlier based on external appearance; includes alignment)"
+        : "Maintenance car: replace semi-annually / 2x a year (or earlier based on external appearance; includes alignment)"
     });
   }
 
@@ -734,6 +761,106 @@ export const DEFAULT_DRIVERS = [
     totalTrips: 156,
     safetyRating: "99.1%",
     certifications: ["Defensive Driving Certified", "Overhead Line Safety NC II"]
+  },
+  {
+    id: "DRV-007",
+    name: "Engr. Mateo R. Villanueva",
+    employeeId: "EMP-2016-014",
+    title: "Lead Fleet Diagnostic Specialist",
+    role: "Lead Fleet Diagnostic Specialist",
+    department: "Technical / Engineering",
+    category: "Heavy Equipment",
+    branchId: "BR-KID",
+    assignedVehicleCode: null,
+    licenseNo: "L02-10-551204",
+    licenseType: "Professional (RC 1, 2, 3)",
+    licenseExpiry: "2028-04-12",
+    phone: "0917-612-8801",
+    email: "mateo.villanueva@cotelco.com.ph",
+    status: "ON-DUTY",
+    totalTrips: 48,
+    safetyRating: "99.7%",
+    certifications: ["TESDA Automotive Servicing NC IV", "Heavy Fleet Diagnostics Master"]
+  },
+  {
+    id: "DRV-008",
+    name: "Rogelio D. Bautista",
+    employeeId: "EMP-2018-031",
+    title: "Senior Heavy Hydraulics & Boom Mechanic",
+    role: "Senior Heavy Hydraulics & Boom Mechanic",
+    department: "Technical / Engineering",
+    category: "Heavy Equipment",
+    branchId: "BR-KID",
+    assignedVehicleCode: null,
+    licenseNo: "L02-13-774120",
+    licenseType: "Professional (RC 1, 2, 3)",
+    licenseExpiry: "2027-09-30",
+    phone: "0918-440-1922",
+    email: "rogelio.bautista@cotelco.com.ph",
+    status: "ON-DUTY",
+    totalTrips: 36,
+    safetyRating: "99.5%",
+    certifications: ["Hydraulic Boom & Outrigger Certification", "TESDA Heavy Equipment Servicing NC III"]
+  },
+  {
+    id: "DRV-009",
+    name: "Ernesto C. Solis",
+    employeeId: "EMP-2019-047",
+    title: "Master Diesel & Drivetrain Technician",
+    role: "Master Diesel & Drivetrain Technician",
+    department: "Technical / Engineering",
+    category: "Heavy Equipment",
+    branchId: "BR-KID",
+    assignedVehicleCode: null,
+    licenseNo: "L02-14-319842",
+    licenseType: "Professional (RC 1, 2, 3)",
+    licenseExpiry: "2028-02-19",
+    phone: "0920-518-7734",
+    email: "ernesto.solis@cotelco.com.ph",
+    status: "ON-DUTY",
+    totalTrips: 29,
+    safetyRating: "99.3%",
+    certifications: ["Common Rail Diesel Injection Specialist", "TESDA Diesel Engine Overhaul NC III"]
+  },
+  {
+    id: "DRV-010",
+    name: "Jerome P. Navarro",
+    employeeId: "EMP-2020-073",
+    title: "Automotive Electrical & OBD-II Specialist",
+    role: "Automotive Electrical & OBD-II Specialist",
+    department: "Technical / Engineering",
+    category: "Light Commercial",
+    branchId: "BR-KAB",
+    assignedVehicleCode: null,
+    licenseNo: "L02-16-882411",
+    licenseType: "Professional (RC 1, 2)",
+    licenseExpiry: "2028-07-08",
+    phone: "0939-881-4409",
+    email: "jerome.navarro@cotelco.com.ph",
+    status: "ON-DUTY",
+    totalTrips: 31,
+    safetyRating: "99.4%",
+    certifications: ["Automotive Electrical & ECU Diagnostics NC III", "Alternator & High-Current Systems"]
+  },
+  {
+    id: "DRV-011",
+    name: "Dante M. Soriano",
+    employeeId: "EMP-2021-055",
+    title: "Brake, Suspension & Chassis Specialist",
+    role: "Brake, Suspension & Chassis Specialist",
+    department: "Technical / Engineering",
+    category: "Light Commercial",
+    branchId: "BR-MID",
+    assignedVehicleCode: null,
+    licenseNo: "L02-17-662019",
+    licenseType: "Professional (RC 1, 2)",
+    licenseExpiry: "2027-12-05",
+    phone: "0947-332-9105",
+    email: "dante.soriano@cotelco.com.ph",
+    status: "ON-DUTY",
+    totalTrips: 24,
+    safetyRating: "99.2%",
+    certifications: ["Air & Hydraulic Brake Overhaul NC II", "Wheel Alignment & Suspension Certification"]
   }
 ];
 
@@ -818,7 +945,7 @@ export const DEFAULT_WORK_ORDERS = [
     category: "Dielectric / Safety Certification",
     priority: "ROUTINE",
     status: "In Shop",
-    currentStage: "Diagnosing",
+    currentStage: "Queued / Inspection",
     dateReported: "2026-11-12",
     targetCompletion: "2026-11-18",
     reportedBy: "Rodrigo T. Mendoza",
@@ -873,6 +1000,7 @@ export const DEFAULT_WORK_ORDERS = [
     priority: "ROUTINE",
     status: "Completed / Released",
     currentStage: "Completed / Released",
+    archivedFromBoard: true,
     dateReported: "2026-09-17",
     targetCompletion: "2026-09-18",
     dateCompleted: "2026-09-18",

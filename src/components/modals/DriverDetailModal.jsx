@@ -19,7 +19,6 @@ export const DriverDetailModal = () => {
     vehicles = [],
     branches = [],
     bookings = [],
-    grantVehicleAccess,
     revokeVehicleAccess
   } = useFleet();
 

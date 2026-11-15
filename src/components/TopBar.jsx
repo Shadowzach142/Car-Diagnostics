@@ -14,22 +14,20 @@ import {
 
 const PAGE_META = {
   dashboard: { title: 'Dashboard', subtitle: 'Readiness & active alerts' },
-  directory: { title: 'Fleet Directory', subtitle: 'Master vehicle inventory' },
   profiling: { title: 'Car Profiling', subtitle: 'Technical dossiers & specs' },
   drivers: { title: 'Employees', subtitle: 'Workforce roster & vehicle authorizations' },
   bookings: { title: 'Calendar', subtitle: 'Dispatches & timetable' },
   health: { title: 'Ongoing Health', subtitle: 'Change oil intervals, mileage countdowns & vehicle diagnostics' },
   maintenance: { title: 'Maintenance', subtitle: 'Active maintenance steps, completed service & assigned technicians' },
-  'map-view': { title: 'Branch Map', subtitle: 'Geospatial deployment corridor' },
-  auditing: { title: 'Repair Ledger', subtitle: 'Audited expenses & vouchers' },
+  auditing: { title: 'Reports', subtitle: 'Logs history of vehicle & driver reports' },
   editables: { title: 'Editables', subtitle: 'Manage departments, titles, stations & classifications' },
-  governance: { title: 'Security & Audit', subtitle: 'Role permissions & logs' }
+  governance: { title: 'Security & Audit', subtitle: 'Role permissions & logs' },
+  profile: { title: 'My Profile', subtitle: 'Mechanic profile & assigned workload' }
 };
 
 const ROLES = [
   { id: 'DIRECTOR', label: 'Operations Director' },
-  { id: 'DISPATCHER', label: 'Branch Dispatcher' },
-  { id: 'MAINTENANCE', label: 'Maintenance Officer' }
+  { id: 'MECHANIC', label: 'Assigned Mechanic' }
 ];
 
 const initials = (label) =>
@@ -40,12 +38,15 @@ export const TopBar = () => {
     activeTab,
     settings,
     setRole,
+    setCurrentMechanic,
     toggleSeniorMode,
     toggleHighContrast,
     resetToFactoryDefaults,
     globalSearch,
     setGlobalSearch,
     vehicles,
+    workOrders = [],
+    editables = {},
     setSelectedVehicle,
     setModalType
   } = useFleet();
@@ -82,8 +83,23 @@ export const TopBar = () => {
   }, []);
 
   const meta = PAGE_META[activeTab] || PAGE_META.dashboard;
-  const flagged = vehicles.filter(v => v.urgentAlert || v.status !== 'ACTIVE');
+  const isMechanic = settings.currentRole === 'MECHANIC';
+  const mechanicsList = editables.mechanics || [];
+  const activeMechanic = settings.currentMechanic || mechanicsList[0] || '';
+  const activeMechShort = activeMechanic.split(' (')[0].trim();
+
+  const flagged = isMechanic
+    ? vehicles.filter(v =>
+        workOrders.some(
+          wo =>
+            wo.vehicleCode === v.code &&
+            wo.status !== 'Completed / Released' &&
+            (wo.assignedMechanic || '').split(' (')[0].trim() === activeMechShort
+        )
+      )
+    : vehicles.filter(v => v.urgentAlert || v.status !== 'ACTIVE');
   const role = ROLES.find(r => r.id === settings.currentRole) || ROLES[0];
+  const displayName = isMechanic ? (activeMechShort || role.label) : role.label;
 
   const submitSearch = (e) => {
     e.preventDefault();
@@ -182,10 +198,10 @@ export const TopBar = () => {
             onClick={() => { setProfileOpen(o => !o); setNotifOpen(false); }}
             aria-expanded={profileOpen}
           >
-            <span className="profile-avatar-circle">{initials(role.label)}</span>
+            <span className="profile-avatar-circle">{initials(displayName)}</span>
             <span className="profile-text-cluster">
-              <span className="profile-user-name">{role.label}</span>
-              <span className="profile-user-role">Active Role</span>
+              <span className="profile-user-name">{displayName}</span>
+              <span className="profile-user-role">{isMechanic ? 'Assigned Mechanic' : 'Active Role'}</span>
             </span>
             <ChevronDown size={15} color="#9CA3AF" />
           </button>
@@ -199,13 +215,36 @@ export const TopBar = () => {
                     key={r.id}
                     type="button"
                     className={`role-select-item ${settings.currentRole === r.id ? 'active' : ''}`}
-                    onClick={() => { setRole(r.id); setProfileOpen(false); }}
+                    onClick={() => {
+                      setRole(r.id);
+                      if (r.id !== 'MECHANIC') setProfileOpen(false);
+                    }}
                   >
                     <span>{r.label}</span>
                     {settings.currentRole === r.id && <Check size={15} />}
                   </button>
                 ))}
               </div>
+
+              {isMechanic && mechanicsList.length > 0 && (
+                <div className="dropdown-section">
+                  <div className="dropdown-section-label">Active Mechanic</div>
+                  <select
+                    className="form-select"
+                    value={activeMechanic}
+                    onChange={(e) => {
+                      setCurrentMechanic(e.target.value);
+                      setProfileOpen(false);
+                    }}
+                    aria-label="Select active mechanic"
+                    style={{ fontSize: '0.8rem', minHeight: '34px' }}
+                  >
+                    {mechanicsList.map(m => (
+                      <option key={m} value={m}>{m.split(' (')[0].trim()}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="dropdown-section">
                 <div className="dropdown-section-label">Accessibility</div>

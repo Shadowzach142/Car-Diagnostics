@@ -463,66 +463,61 @@ export const VehicleAccessModal = () => {
             </>
           )}
 
-          {/* TAB 2: GRANT ACCESS DIRECTORY (High-Volume Search & Filter without Dropdowns) */}
+          {/* TAB 2: GRANT ACCESS DIRECTORY (Clean Search + Fixed Department Select) */}
           {activeTab === 'grant' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {/* Search Bar for High-Volume Workforce Data */}
-              <div style={{ position: 'relative' }}>
-                <Search
-                  size={15}
-                  color="var(--text-tertiary)"
-                  style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
-                />
-                <input
-                  type="text"
-                  className="form-input"
-                  style={{ paddingLeft: '32px', fontSize: '0.82rem', height: '34px' }}
-                  placeholder="Search available personnel by name, ID, title, department..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  autoFocus
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-tertiary)' }}
+              {/* Fixed-Height Search + Department Select Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: departments.length > 0 ? '1fr auto' : '1fr', gap: '0.5rem', alignItems: 'center' }}>
+                <div style={{ position: 'relative' }}>
+                  <Search
+                    size={15}
+                    color="var(--text-tertiary)"
+                    style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
+                  />
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ paddingLeft: '32px', paddingRight: searchQuery ? '28px' : '10px', fontSize: '0.82rem', height: '36px' }}
+                    placeholder="Search by name, ID, title, department..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    autoFocus
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-tertiary)' }}
+                      aria-label="Clear search"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {departments.length > 0 && (
+                  <select
+                    className="form-select"
+                    value={deptFilter}
+                    onChange={(e) => setDeptFilter(e.target.value)}
+                    style={{ height: '36px', fontSize: '0.8rem', minWidth: '165px' }}
+                    aria-label="Filter by department"
                   >
-                    <X size={14} />
-                  </button>
+                    <option value="ALL">All Departments ({unclearedDrivers.length})</option>
+                    {departments.map(dept => {
+                      const count = unclearedDrivers.filter(d => d.department === dept).length;
+                      return (
+                        <option key={dept} value={dept}>
+                          {dept} ({count})
+                        </option>
+                      );
+                    })}
+                  </select>
                 )}
               </div>
 
-              {/* Department Filter Chips for Quick Narrowing */}
-              {departments.length > 0 && (
-                <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto', paddingBottom: '2px' }}>
-                  <button
-                    type="button"
-                    className={`btn btn-xs ${deptFilter === 'ALL' ? 'btn-primary' : 'btn-outline'}`}
-                    style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem', borderRadius: '999px', whiteSpace: 'nowrap' }}
-                    onClick={() => setDeptFilter('ALL')}
-                  >
-                    All Departments ({unclearedDrivers.length})
-                  </button>
-                  {departments.map(dept => {
-                    const count = unclearedDrivers.filter(d => d.department === dept).length;
-                    return (
-                      <button
-                        key={dept}
-                        type="button"
-                        className={`btn btn-xs ${deptFilter === dept ? 'btn-primary' : 'btn-outline'}`}
-                        style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem', borderRadius: '999px', whiteSpace: 'nowrap' }}
-                        onClick={() => setDeptFilter(dept)}
-                      >
-                        {dept} ({count})
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Scrollable Scannable Cards (Full Info, No Truncation) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '42vh', overflowY: 'auto' }}>
+              {/* Scrollable Scannable Cards (Single Clean Scroll Container) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '340px', overflowY: 'auto', paddingRight: '2px' }}>
                 {filteredUncleared.length === 0 ? (
                   <div style={{
                     textAlign: 'center',
@@ -604,13 +599,17 @@ export const VehicleAccessModal = () => {
                         ) : (
                           <button
                             type="button"
-                            className="btn btn-sm btn-primary"
+                            className="btn btn-sm btn-outline"
                             style={{
+                              minHeight: '32px',
                               fontSize: '0.75rem',
+                              fontWeight: 700,
                               padding: '0.25rem 0.75rem',
+                              borderRadius: '8px',
+                              color: 'var(--text-main)',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '0.35rem',
+                              gap: '0.3rem',
                               flexShrink: 0,
                               whiteSpace: 'nowrap'
                             }}

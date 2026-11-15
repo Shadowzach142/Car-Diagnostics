@@ -2,15 +2,14 @@ import React from 'react';
 import { useFleet } from '../context/FleetContext';
 import {
   LayoutDashboard,
-  Truck,
   Car,
   CalendarDays,
   Activity,
   Wrench,
-  MapPin,
-  Receipt,
+  FileText,
   ShieldCheck,
   Users,
+  User,
   Sliders,
   PanelLeftClose,
   PanelLeftOpen
@@ -25,25 +24,41 @@ export const Sidebar = () => {
     sidebarCollapsed,
     toggleSidebar,
     workOrders,
-    bookings
+    bookings,
+    settings
   } = useFleet();
 
-  const openOrders = workOrders.filter(w => w.status !== COMPLETED).length;
-  const activeBookingsCount = (bookings || []).filter(b => b.status !== 'Completed').length;
+  const isMechanic = settings?.currentRole === 'MECHANIC';
+  const mechShort = (settings?.currentMechanic || '').split(' (')[0].trim().toLowerCase();
 
-  const navItems = [
+  const visibleWorkOrders = isMechanic
+    ? workOrders.filter(w => (w.assignedMechanic || '').split(' (')[0].trim().toLowerCase() === mechShort)
+    : workOrders;
+
+  const openOrders = visibleWorkOrders.filter(w => w.status !== COMPLETED).length;
+  const visibleBookings = isMechanic
+    ? (bookings || []).filter(b => b.type === 'MAINTENANCE' && (b.driver || '').split(' (')[0].trim().toLowerCase() === mechShort)
+    : (bookings || []);
+  const activeBookingsCount = visibleBookings.filter(b => b.status !== 'Completed').length;
+
+  const allNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'directory', label: 'Fleet Directory', icon: Truck },
     { id: 'profiling', label: 'Car Profiling', icon: Car },
     { id: 'drivers', label: 'Employees', icon: Users },
     { id: 'bookings', label: 'Calendar', icon: CalendarDays, badge: activeBookingsCount },
     { id: 'health', label: 'Ongoing Health', icon: Activity },
     { id: 'maintenance', label: 'Maintenance', icon: Wrench, badge: openOrders },
-    { id: 'map-view', label: 'Branch Map', icon: MapPin },
-    { id: 'auditing', label: 'Repair Ledger', icon: Receipt },
+    { id: 'auditing', label: 'Reports', icon: FileText },
     { id: 'editables', label: 'Editables', icon: Sliders },
     { id: 'governance', label: 'Security & Audit', icon: ShieldCheck }
   ];
+
+  const navItems = isMechanic
+    ? [
+        ...allNavItems.filter(item => ['dashboard', 'profiling', 'bookings', 'health', 'maintenance', 'auditing'].includes(item.id)),
+        { id: 'profile', label: 'My Profile', icon: User }
+      ]
+    : allNavItems;
 
   return (
     <aside

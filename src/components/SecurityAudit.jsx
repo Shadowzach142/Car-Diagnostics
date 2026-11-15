@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import { useFleet } from '../context/FleetContext';
 import {
   UserCheck,
-  Radio,
   Wrench,
   KeyRound,
   Lock,
@@ -16,27 +15,18 @@ const ROLES = [
     icon: UserCheck,
     title: 'Operations Director',
     points: [
-      'Full access to fleet records and system settings',
-      'Register and retire vehicles',
+      'Full access to fleet records, employees, calendar, and system settings',
+      'Register and retire vehicles, manage clearances, and assign mechanics',
       'Approve repair expenses and review audits'
     ]
   },
   {
-    icon: Radio,
-    title: 'Branch Dispatcher',
-    points: [
-      'Reassign vehicles within the branch network',
-      'Assign drivers and crew leaders',
-      'Request urgent repairs; cannot override safety certification'
-    ]
-  },
-  {
     icon: Wrench,
-    title: 'Maintenance Officer',
+    title: 'Assigned Mechanic',
     points: [
-      'Update repair progress and log parts and labor',
-      'Upload test and inspection certificates',
-      'Clear in-shop vehicles back to Active'
+      'Scoped view of personal mechanic Dashboard and assigned Maintenance jobs',
+      'Update repair stages and mark assigned work orders as completed',
+      'No access to other mechanics’ queues, profiling, or system settings'
     ]
   }
 ];

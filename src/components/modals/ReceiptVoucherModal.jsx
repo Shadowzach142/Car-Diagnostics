@@ -149,6 +149,33 @@ export const ReceiptVoucherModal = () => {
               <strong>Service Summary &amp; Certification:</strong> {activeReceipt.serviceSummary}
             </div>
 
+            {/* Attached Receipt / Official Invoice Photo */}
+            {activeReceipt.receiptImage && (
+              <div style={{
+                background: '#F8FAFC',
+                border: '1px solid #CBD5E1',
+                padding: '0.85rem',
+                borderRadius: '6px',
+                marginBottom: '1.5rem'
+              }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Attached Receipt / Official Invoice Photo
+                </div>
+                <img
+                  src={activeReceipt.receiptImage}
+                  alt={`Receipt for ${activeReceipt.voucherNo}`}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '280px',
+                    borderRadius: '6px',
+                    border: '1px solid #E2E8F0',
+                    objectFit: 'contain',
+                    display: 'block'
+                  }}
+                />
+              </div>
+            )}
+
             {/* Signatures */}
             <div style={{
               display: 'grid',

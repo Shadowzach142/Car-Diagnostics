@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useFleet } from '../context/FleetContext';
 import { getVehicleImage, DEFAULT_EDITABLES } from '../data/fleetData';
 import {
@@ -10,7 +10,8 @@ import {
   Check,
   Wrench,
   ArrowRight,
-  Search
+  Search,
+  Eye
 } from 'lucide-react';
 
 const shortPerson = (str) => {
@@ -50,11 +51,8 @@ const evaluateDiagnostic = (diag, currentOdo = 0) => {
   const lastDoneKm = Number(diag.lastDoneKm) || Math.max(0, targetKm - intervalKm);
   const remainingKm = targetKm > 0 ? targetKm - currentOdo : null;
   const usedKm = Math.max(0, currentOdo - lastDoneKm);
-  const progressPct = intervalKm > 0
-    ? Math.min(100, Math.max(8, Math.round((usedKm / intervalKm) * 100)))
-    : 50;
-
   let remainingDays = null;
+  let totalCycleDays = (Number(diag.intervalMonths) || 6) * 30;
   if (diag.targetDate) {
     const now = new Date();
     const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -62,7 +60,28 @@ const evaluateDiagnostic = (diag, currentOdo = 0) => {
     if (!isNaN(targetLocal)) {
       remainingDays = Math.ceil((targetLocal - todayLocal) / (1000 * 60 * 60 * 24));
     }
+    if (diag.lastDoneDate) {
+      const lastLocal = parseLocalYmd(diag.lastDoneDate) || new Date(diag.lastDoneDate);
+      if (!isNaN(lastLocal) && !isNaN(targetLocal) && targetLocal > lastLocal) {
+        totalCycleDays = Math.max(30, Math.ceil((targetLocal - lastLocal) / (1000 * 60 * 60 * 24)));
+      }
+    }
   }
+
+  const dateHealthPct = remainingDays === null
+    ? 100
+    : remainingDays <= 0
+    ? 4
+    : Math.min(100, Math.max(6, Math.round((remainingDays / totalCycleDays) * 100)));
+
+  // Remaining life percentage: 100% = full interval left, shrinks toward 0% as due approaches, 4% stub when overdue
+  const healthPct = remainingKm === null
+    ? dateHealthPct
+    : remainingKm <= 0
+    ? 4
+    : intervalKm > 0
+    ? Math.min(100, Math.max(6, Math.round((remainingKm / intervalKm) * 100)))
+    : 50;
 
   let kmStatus = 'HEALTHY';
   if (mode === 'KM' || mode === 'BOTH') {
@@ -80,12 +99,14 @@ const evaluateDiagnostic = (diag, currentOdo = 0) => {
   if (kmStatus === 'OVERDUE' || dateStatus === 'OVERDUE') status = 'OVERDUE';
   else if (kmStatus === 'DUE_SOON' || dateStatus === 'DUE_SOON') status = 'DUE_SOON';
 
-  return { remainingKm, remainingDays, usedKm, intervalKm, progressPct, kmStatus, dateStatus, status };
+  return { remainingKm, remainingDays, usedKm, intervalKm, healthPct, dateHealthPct, kmStatus, dateStatus, status };
 };
 
 export const OngoingHealth = () => {
   const {
+    settings,
     vehicles = [],
+    drivers = [],
     branches = [],
     workOrders = [],
     editables = {},
@@ -95,11 +116,33 @@ export const OngoingHealth = () => {
     createWorkOrder,
     upsertVehicleDiagnostic,
     removeVehicleDiagnostic,
-    globalSearch
+    globalSearch,
+    focusedHealthVehicleId,
+    setFocusedHealthVehicleId,
+    setFocusedProfileVehicleId
   } = useFleet();
 
   const [branchFilter, setBranchFilter] = useState('ALL');
   const [diagFilter, setDiagFilter] = useState('ALL'); // 'ALL' | 'OIL' | 'BRAKES' | 'DIELECTRIC'
+
+  useEffect(() => {
+    if (!focusedHealthVehicleId) return;
+    setBranchFilter('ALL');
+    setDiagFilter('ALL');
+    const scrollTimer = setTimeout(() => {
+      const el = document.getElementById(`health-card-${focusedHealthVehicleId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 60);
+    const clearTimer = setTimeout(() => {
+      setFocusedHealthVehicleId(null);
+    }, 2400);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
+  }, [focusedHealthVehicleId, setFocusedHealthVehicleId]);
 
   const [diagModalVehicleId, setDiagModalVehicleId] = useState(null);
   const [editingDiag, setEditingDiag] = useState(null);
@@ -121,8 +164,25 @@ export const OngoingHealth = () => {
   const branchName = (id) => branches.find(b => b.id === id)?.municipality || id;
   const q = (globalSearch || '').toLowerCase().trim();
 
+  const isMechanic = settings?.currentRole === 'MECHANIC';
+  const mechNameNorm = (settings?.currentMechanic || '').split(' (')[0].trim().toLowerCase();
+  const matchedDriver = useMemo(
+    () => drivers.find(d => (d.name || '').trim().toLowerCase() === mechNameNorm),
+    [drivers, mechNameNorm]
+  );
+
   const healthVehicles = useMemo(() => {
     return vehicles.filter(v => {
+      if (isMechanic) {
+        if (matchedDriver) {
+          if (!(v.authorizedDriverIds || []).includes(matchedDriver.id)) return false;
+        } else {
+          const hasOrder = workOrders.some(
+            wo => wo.vehicleCode === v.code && (wo.assignedMechanic || '').split(' (')[0].trim().toLowerCase() === mechNameNorm
+          );
+          if (!hasOrder) return false;
+        }
+      }
       if ((v.diagnostics || []).length === 0) return false;
       if (branchFilter !== 'ALL' && v.branchId !== branchFilter) return false;
       if (q) {
@@ -139,7 +199,7 @@ export const OngoingHealth = () => {
       }
       return true;
     });
-  }, [vehicles, branchFilter, q]);
+  }, [vehicles, isMechanic, matchedDriver, workOrders, mechNameNorm, branchFilter, q]);
 
   const openDiagnosticsModal = (v, initialDiag = null) => {
     setDiagModalVehicleId(v.id);
@@ -353,16 +413,18 @@ export const OngoingHealth = () => {
           Vehicles <strong>{healthVehicles.length}</strong>
         </span>
 
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => {
-            setAddCarSearch('');
-            setAddCarPickerOpen(true);
-          }}
-        >
-          <Plus size={16} /> Add Cars
-        </button>
+        {!isMechanic && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setAddCarSearch('');
+              setAddCarPickerOpen(true);
+            }}
+          >
+            <Plus size={16} /> Add Cars
+          </button>
+        )}
       </div>
 
       {/* Responsive Card Grid (Matches Car Profiling & Employees) */}
@@ -392,7 +454,17 @@ export const OngoingHealth = () => {
               ev: evaluateDiagnostic(d, odo)
             }));
 
-            const isDue = allDiags.some(d => evaluateDiagnostic(d, odo).status !== 'HEALTHY');
+            const getVisibleRowStatus = (d, ev) => {
+              const showKmBar = (d.trackMode === 'KM' || d.trackMode === 'BOTH') && ev.remainingKm !== null;
+              return showKmBar ? ev.kmStatus : ev.dateStatus;
+            };
+
+            const allRowStatuses = allDiags.map(d => {
+              const ev = evaluateDiagnostic(d, odo);
+              return getVisibleRowStatus(d, ev);
+            });
+            const isOverdueCard = allRowStatuses.some(s => s === 'OVERDUE');
+            const isDue = allRowStatuses.some(s => s !== 'HEALTHY');
             const activeWO = workOrders.find(
               w => w.vehicleCode === v.code && w.status !== 'Completed / Released'
             );
@@ -400,12 +472,13 @@ export const OngoingHealth = () => {
             return (
               <div
                 key={v.id}
-                className="data-card"
+                id={`health-card-${v.id}`}
+                className={`data-card ${focusedHealthVehicleId === v.id ? 'health-focus-pulse' : ''}`}
                 style={{
                   background: 'var(--bg-surface)',
                   border: '1px solid var(--border-light)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '1rem',
+                  borderRadius: '12px',
+                  padding: '1.15rem 1.25rem',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
@@ -413,41 +486,108 @@ export const OngoingHealth = () => {
                 }}
               >
                 <div>
-                  {/* Header: Photo, Code & Plate, Current Odometer */}
-                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.8rem' }}>
+                  {/* Header: Matches Car Profiling (58x58 Photo, Code + Year, Model, Plate Pill + Station, Status Pill) */}
+                  <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start', marginBottom: '1.05rem' }}>
                     <img
                       src={img}
                       alt={v.code}
                       style={{
-                        width: '48px',
-                        height: '36px',
-                        borderRadius: '5px',
+                        width: '58px',
+                        height: '58px',
+                        borderRadius: '12px',
                         objectFit: 'cover',
-                        border: '1px solid var(--border-subtle)',
+                        border: '1px solid var(--border-light)',
+                        background: 'var(--bg-surface-subtle)',
                         flexShrink: 0
                       }}
                     />
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.94rem', color: 'var(--text-main)' }}>
-                          {v.code} <span className="mono" style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>&bull; {v.plateNo}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0 }}>
+                          <strong style={{ fontSize: '1.02rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                            {v.code}
+                          </strong>
+                          <span
+                            style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              color: 'var(--text-secondary)',
+                              background: 'var(--bg-surface-subtle)',
+                              border: '1px solid var(--border-light)',
+                              borderRadius: '5px',
+                              padding: '1px 6px',
+                              flexShrink: 0
+                            }}
+                          >
+                            {v.year}
+                          </span>
                         </div>
-                        <span className={`badge ${isDue ? 'badge-warning' : 'badge-success'}`} style={{ fontSize: '0.68rem' }}>
-                          {isDue ? 'Service Soon' : 'Healthy'}
+                        <span
+                          className={`badge ${isOverdueCard ? 'badge-danger' : isDue ? 'badge-warning' : 'badge-success'}`}
+                          style={{
+                            fontSize: '0.64rem',
+                            fontWeight: 700,
+                            letterSpacing: '0.03em',
+                            textTransform: 'uppercase',
+                            padding: '0.16rem 0.5rem',
+                            flexShrink: 0
+                          }}
+                        >
+                          {isOverdueCard ? 'OVERDUE' : isDue ? 'SERVICE SOON' : 'HEALTHY'}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {v.makeModel} &bull; <span className="mono" style={{ fontWeight: 600, color: 'var(--text-main)' }}>{odo.toLocaleString()} km</span>
+                      <div
+                        style={{
+                          fontSize: '0.82rem',
+                          color: 'var(--text-secondary)',
+                          marginTop: '3px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                        title={v.makeModel}
+                      >
+                        {v.makeModel}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '5px', minWidth: 0 }}>
+                        <span
+                          className="mono"
+                          style={{
+                            display: 'inline-block',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            color: 'var(--text-main)',
+                            background: 'var(--bg-surface-subtle)',
+                            border: '1px solid var(--border-light)',
+                            borderRadius: '5px',
+                            padding: '1px 7px',
+                            flexShrink: 0
+                          }}
+                        >
+                          {v.plateNo}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            color: 'var(--text-tertiary)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                          title={branchName(v.branchId)}
+                        >
+                          &bull; {branchName(v.branchId)}
+                        </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Diagnostic Items with KM Meter Bar */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.85rem' }}>
+                  {/* Diagnostic Items with Clean Progress Meter Bars */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginBottom: '1.1rem' }}>
                     {evaluatedDiags.map(d => {
                       const { ev } = d;
                       const showKmBar = (d.trackMode === 'KM' || d.trackMode === 'BOTH') && ev.remainingKm !== null;
-                      // Color KM bar & KM pill strictly by KM status so identical remaining KM always has the same color
                       const displayStatus = showKmBar ? ev.kmStatus : ev.dateStatus;
                       const isOverdue = displayStatus === 'OVERDUE';
                       const isSoon = displayStatus === 'DUE_SOON';
@@ -458,91 +598,71 @@ export const OngoingHealth = () => {
                           ? `Overdue ${Math.abs(ev.remainingKm).toLocaleString()} km`
                           : `${ev.remainingKm.toLocaleString()} km left`;
                       } else if (d.targetDate) {
-                        badgeLabel = `Due ${d.targetDate}`;
+                        badgeLabel = d.targetDate;
                       }
 
                       const barColor = isOverdue
                         ? '#DC2626'
                         : isSoon
                         ? '#F59E0B'
-                        : '#16A34A';
+                        : '#10B981';
+
+                      const barWidthPct = showKmBar ? ev.healthPct : ev.dateHealthPct;
 
                       return (
                         <div
                           key={d.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => openDiagnosticsModal(v, d)}
-                          onKeyDown={(e) => {
+                          role={isMechanic ? undefined : 'button'}
+                          tabIndex={isMechanic ? undefined : 0}
+                          onClick={isMechanic ? undefined : () => openDiagnosticsModal(v, d)}
+                          onKeyDown={isMechanic ? undefined : (e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();
                               openDiagnosticsModal(v, d);
                             }
                           }}
                           style={{
-                            background: 'var(--bg-surface-subtle)',
-                            border: '1px solid var(--border-light)',
+                            padding: '0.2rem 0.35rem',
+                            margin: '0 -0.35rem',
                             borderRadius: '6px',
-                            padding: '0.55rem 0.7rem',
-                            cursor: 'pointer'
+                            cursor: isMechanic ? 'default' : 'pointer',
+                            transition: 'background 0.15s ease'
                           }}
-                          title="Click to edit KM or Date interval"
+                          onMouseEnter={isMechanic ? undefined : (e) => { e.currentTarget.style.background = 'var(--bg-surface-subtle)'; }}
+                          onMouseLeave={isMechanic ? undefined : (e) => { e.currentTarget.style.background = 'transparent'; }}
+                          title={isMechanic ? undefined : 'Click to edit KM or Date interval'}
                         >
-                          {/* Top Row: Diagnostic Name & Remaining KM Badge */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
-                            <span style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--text-main)' }}>
+                          {/* Top Row: Diagnostic Name & Remaining KM / Date Badge */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.38rem' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-main)' }}>
                               {d.type}
                             </span>
                             <span
                               className={`badge ${isOverdue ? 'badge-danger' : isSoon ? 'badge-warning' : 'badge-success'}`}
-                              style={{ fontSize: '0.67rem', padding: '0.12rem 0.45rem' }}
+                              style={{ fontSize: '0.67rem', fontWeight: 700, padding: '0.12rem 0.48rem', borderRadius: '6px', flexShrink: 0 }}
                             >
                               {badgeLabel}
                             </span>
                           </div>
 
-                          {/* Middle Row: Colorful KM Meter Progress Bar */}
-                          {showKmBar && (
+                          {/* Bottom Row: Sleek Progress Bar */}
+                          <div
+                            style={{
+                              height: '5px',
+                              background: '#E2E8F0',
+                              borderRadius: '999px',
+                              overflow: 'hidden'
+                            }}
+                          >
                             <div
                               style={{
-                                height: '7px',
-                                background: '#E2E8F0',
+                                width: `${barWidthPct}%`,
+                                height: '100%',
+                                background: barColor,
                                 borderRadius: '999px',
-                                overflow: 'hidden',
-                                margin: '0.45rem 0 0.35rem 0'
+                                transition: 'width 0.25s ease'
                               }}
-                            >
-                              <div
-                                style={{
-                                  width: `${ev.progressPct}%`,
-                                  height: '100%',
-                                  background: barColor,
-                                  borderRadius: '999px',
-                                  transition: 'width 0.25s ease'
-                                }}
-                              />
-                            </div>
-                          )}
-
-                          {/* Bottom Row: Next KM / Expiration Date & Assigned Specialist */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: showKmBar ? 0 : '0.28rem' }}>
-                            <span className="mono">
-                              {(d.trackMode === 'KM' || d.trackMode === 'BOTH') && d.targetKm
-                                ? `Next: ${Number(d.targetKm).toLocaleString()} km`
-                                : ''}
-                              {d.trackMode === 'BOTH' && d.targetKm && d.targetDate ? ' • ' : ''}
-                              {(d.trackMode === 'DATE' || d.trackMode === 'BOTH') && d.targetDate && (
-                                <span style={{
-                                  color: ev.dateStatus === 'OVERDUE' ? '#DC2626' : ev.dateStatus === 'DUE_SOON' ? '#D97706' : 'inherit',
-                                  fontWeight: ev.dateStatus !== 'HEALTHY' ? 700 : 400
-                                }}>
-                                  Exp: {d.targetDate}
-                                </span>
-                              )}
-                            </span>
-                            <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>
-                              {shortPerson(d.assignedPerson)}
-                            </span>
+                            />
                           </div>
                         </div>
                       );
@@ -550,47 +670,59 @@ export const OngoingHealth = () => {
                   </div>
                 </div>
 
-                {/* Card Footer: Station & 1-Click Maintenance Action */}
+                {/* Card Footer: Uncramped Action Row */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   gap: '0.5rem',
-                  paddingTop: '0.65rem',
+                  paddingTop: '0.85rem',
                   borderTop: '1px solid var(--border-light)'
                 }}>
-                  <span style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {branchName(v.branchId)}
-                  </span>
-                  <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
                     <button
                       type="button"
                       className="btn btn-sm btn-outline"
-                      style={{ padding: '0.26rem 0.6rem', fontSize: '0.75rem' }}
-                      onClick={() => openDiagnosticsModal(v)}
+                      style={{ padding: '0.32rem 0.65rem', fontSize: '0.76rem' }}
+                      onClick={() => {
+                        setFocusedProfileVehicleId(v.id);
+                        setActiveTab('profiling');
+                      }}
+                      title={`Locate ${v.code} in Car Profiling`}
                     >
-                      Edit
+                      <Eye size={13} /> Profile
                     </button>
-                    {activeWO ? (
+                    {!isMechanic && (
                       <button
                         type="button"
                         className="btn btn-sm btn-outline"
-                        style={{ padding: '0.26rem 0.65rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-main)' }}
-                        onClick={() => setActiveTab('maintenance')}
+                        style={{ padding: '0.32rem 0.65rem', fontSize: '0.76rem' }}
+                        onClick={() => openDiagnosticsModal(v)}
+                        title="Edit diagnostic intervals"
                       >
-                        In Maintenance <ArrowRight size={13} />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${isDue ? 'btn-primary' : 'btn-outline'}`}
-                        style={{ padding: '0.26rem 0.65rem', fontSize: '0.75rem' }}
-                        onClick={() => openSendToMaintenanceModal(v)}
-                      >
-                        <Wrench size={12} /> To Maintenance
+                        <Sliders size={13} /> Edit
                       </button>
                     )}
                   </div>
+                  {activeWO ? (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline"
+                      style={{ padding: '0.32rem 0.75rem', fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-main)' }}
+                      onClick={() => setActiveTab('maintenance')}
+                    >
+                      In Maintenance <ArrowRight size={13} />
+                    </button>
+                  ) : !isMechanic ? (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      style={{ padding: '0.32rem 0.8rem', fontSize: '0.76rem', fontWeight: 700 }}
+                      onClick={() => openSendToMaintenanceModal(v)}
+                    >
+                      <Wrench size={13} /> To Maintenance
+                    </button>
+                  ) : null}
                 </div>
               </div>
             );
@@ -879,7 +1011,8 @@ export const OngoingHealth = () => {
                             <option value={2}>Every 2 months</option>
                             <option value={3}>Every 3 months</option>
                             <option value={4}>Every 4 months</option>
-                            <option value={6}>Every 6 months</option>
+                            <option value={6}>Every 6 months (Semi-Annual / 2x yr)</option>
+                            <option value={9}>Every 9 months (Office Cars)</option>
                             <option value={12}>Every 12 months (1 yr)</option>
                             <option value="CUSTOM">Custom Date</option>
                           </select>

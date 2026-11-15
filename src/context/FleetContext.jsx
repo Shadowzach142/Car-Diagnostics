@@ -19,14 +19,56 @@ const FleetContext = createContext(null);
 const STORAGE_KEYS = {
   EDITABLES: 'flt_editables_react_v4',
   BRANCHES: 'flt_branches_react_v4',
-  VEHICLES: 'flt_vehicles_react_v4',
+  VEHICLES: 'flt_vehicles_react_v5',
   WORK_ORDERS: 'flt_work_orders_react_v4',
   REPAIRS: 'flt_repairs_react_v4',
   AUDIT_LOGS: 'flt_audit_logs_react_v4',
   BOOKINGS: 'flt_bookings_react_v4',
   DRIVERS: 'flt_drivers_react_v4',
-  SETTINGS: 'flt_settings_react_v4'
+  SETTINGS: 'flt_settings_react_v4',
+  INCIDENTS: 'flt_incidents_react_v1'
 };
+
+const DEFAULT_INCIDENTS = [
+  {
+    id: 'INC-2026-001',
+    vehicleCode: 'FLT-PU-01',
+    plateNo: 'MAA-2290',
+    model: 'Toyota Hilux 2.8L 4x4 Double Cab',
+    branchId: 'BR-KID',
+    branch: 'Kidapawan District',
+    driverName: 'Danilo C. Santos',
+    date: new Date().toISOString().substring(0, 10),
+    time: '09:30',
+    location: 'Brgy. Paco National Highway, Kidapawan',
+    category: 'Tire / Blowout',
+    severity: 'Medium',
+    odometerKm: 28410,
+    notes: 'Noticed front-right tire sidewall bulge and vibration while returning from feeder inspection. Replaced with spare at roadside and drove slowly back to station.',
+    photoUrl: null,
+    status: 'Open',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'INC-2026-002',
+    vehicleCode: 'FLT-BT-01',
+    plateNo: 'NDI-4092',
+    model: 'Isuzu Forward FTR 16m Boom',
+    branchId: 'BR-KID',
+    branch: 'Kidapawan District',
+    driverName: 'Rodrigo T. Mendoza',
+    date: new Date(Date.now() - 2 * 86400000).toISOString().substring(0, 10),
+    time: '14:15',
+    location: 'Magsaysay Feeder Line 3',
+    category: 'Mechanical Breakdown',
+    severity: 'High',
+    odometerKm: 34250,
+    notes: 'Slight hydraulic pressure drop when elevating boom past 12 meters. Paused aerial work and logged unit for motorpool inspection.',
+    photoUrl: null,
+    status: 'Under Review',
+    createdAt: new Date(Date.now() - 2 * 86400000).toISOString()
+  }
+];
 
 const LEGACY_DEPARTMENT_MAP = {
   'Operations & Maintenance': 'Technical / Engineering',
@@ -65,7 +107,11 @@ export const FleetProvider = ({ children }) => {
         serviceTasksByCategory: parsed.serviceTasksByCategory && typeof parsed.serviceTasksByCategory === 'object'
           ? { ...DEFAULT_EDITABLES.serviceTasksByCategory, ...parsed.serviceTasksByCategory }
           : DEFAULT_EDITABLES.serviceTasksByCategory,
-        mechanics: Array.isArray(parsed.mechanics) && parsed.mechanics.length > 0 ? parsed.mechanics : DEFAULT_EDITABLES.mechanics,
+        mechanics: (() => {
+          const raw = Array.isArray(parsed.mechanics) && parsed.mechanics.length > 0 ? parsed.mechanics : DEFAULT_EDITABLES.mechanics;
+          const employeesOnly = raw.filter(m => !String(m).includes('(Outside Facility)'));
+          return employeesOnly.length > 0 ? employeesOnly : DEFAULT_EDITABLES.mechanics;
+        })(),
         diagnosticTypes: Array.isArray(parsed.diagnosticTypes) && parsed.diagnosticTypes.length > 0 ? parsed.diagnosticTypes : DEFAULT_EDITABLES.diagnosticTypes
       };
     } catch {
@@ -79,8 +125,11 @@ export const FleetProvider = ({ children }) => {
   });
 
   const [vehicles, setVehicles] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.VEHICLES);
-    const baseList = saved ? (() => { try { return JSON.parse(saved); } catch { return DEFAULT_VEHICLES; } })() : DEFAULT_VEHICLES;
+    const savedV5 = localStorage.getItem(STORAGE_KEYS.VEHICLES);
+    const savedV4 = !savedV5 ? localStorage.getItem('flt_vehicles_react_v4') : null;
+    const rawSaved = savedV5 || savedV4;
+    const isMigratingFromV4 = !savedV5 && !!savedV4;
+    const baseList = rawSaved ? (() => { try { return JSON.parse(rawSaved); } catch { return DEFAULT_VEHICLES; } })() : DEFAULT_VEHICLES;
     return baseList.map(v => {
       const defV = DEFAULT_VEHICLES.find(dv => dv.id === v.id || dv.code === v.code);
       return {
@@ -94,9 +143,9 @@ export const FleetProvider = ({ children }) => {
         insuranceExpiryDate: v.insuranceExpiryDate || defV?.insuranceExpiryDate || '2026-10-20',
         registrationAcquiredDate: v.registrationAcquiredDate || defV?.registrationAcquiredDate || '2023-10-23',
         registrationExpiryDate: v.registrationExpiryDate || defV?.registrationExpiryDate || '2026-10-23',
-        diagnostics: Array.isArray(v.diagnostics) && v.diagnostics.length > 0
-          ? v.diagnostics
-          : buildDefaultVehicleDiagnostics(v)
+        diagnostics: isMigratingFromV4 || !Array.isArray(v.diagnostics) || v.diagnostics.length === 0
+          ? buildDefaultVehicleDiagnostics(v)
+          : v.diagnostics
       };
     });
   });
@@ -106,11 +155,23 @@ export const FleetProvider = ({ children }) => {
     if (!saved) return DEFAULT_WORK_ORDERS;
     try {
       const parsed = JSON.parse(saved);
-      return parsed.map(w => ({
-        ...w,
-        currentStage: w.currentStage || (w.status === 'Completed / Released' ? 'Completed / Released' : 'Active Repair / Servicing'),
-        assignedMechanic: w.assignedMechanic || 'Engr. Mateo R. Villanueva (Lead Fleet Diagnostic Specialist)'
-      }));
+      let completedSeen = 0;
+      return parsed.map(w => {
+        const isDone = w.status === 'Completed / Released' || w.currentStage === 'Completed / Released';
+        let archivedFromBoard = Boolean(w.archivedFromBoard);
+        if (isDone && !archivedFromBoard) {
+          completedSeen += 1;
+          if (completedSeen > 1) {
+            archivedFromBoard = true;
+          }
+        }
+        return {
+          ...w,
+          archivedFromBoard,
+          currentStage: w.currentStage || (w.status === 'Completed / Released' ? 'Completed / Released' : 'Active Repair / Servicing'),
+          assignedMechanic: w.assignedMechanic || 'Engr. Mateo R. Villanueva (Lead Fleet Diagnostic Specialist)'
+        };
+      });
     } catch {
       return DEFAULT_WORK_ORDERS;
     }
@@ -136,7 +197,7 @@ export const FleetProvider = ({ children }) => {
     if (!saved) return DEFAULT_DRIVERS;
     try {
       const parsed = JSON.parse(saved);
-      return parsed.map(d => {
+      const migrated = parsed.map(d => {
         const def = DEFAULT_DRIVERS.find(x => x.id === d.id);
         const rawDept = d.department || def?.department || 'Technical / Engineering';
         const migratedDept = LEGACY_DEPARTMENT_MAP[rawDept] || rawDept;
@@ -147,25 +208,56 @@ export const FleetProvider = ({ children }) => {
           department: migratedDept
         };
       });
+      const existingIds = new Set(migrated.map(d => d.id));
+      const existingNames = new Set(migrated.map(d => (d.name || '').toLowerCase()));
+      const missingDefaults = DEFAULT_DRIVERS.filter(
+        def => !existingIds.has(def.id) && !existingNames.has((def.name || '').toLowerCase())
+      );
+      return [...migrated, ...missingDefaults];
     } catch {
       return DEFAULT_DRIVERS;
     }
   });
 
+  const [incidentReports, setIncidentReports] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.INCIDENTS);
+    if (!saved) return DEFAULT_INCIDENTS;
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : DEFAULT_INCIDENTS;
+    } catch {
+      return DEFAULT_INCIDENTS;
+    }
+  });
+
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    return saved ? JSON.parse(saved) : {
+    const parsed = saved ? JSON.parse(saved) : {};
+    const validRole = parsed.currentRole === 'MECHANIC' ? 'MECHANIC' : 'DIRECTOR';
+    return {
       seniorMode: false,
       highContrast: false,
-      currentRole: 'DIRECTOR' // 'DIRECTOR', 'DISPATCHER', 'MAINTENANCE'
+      currentMechanic: DEFAULT_EDITABLES.mechanics[0],
+      ...parsed,
+      currentRole: validRole // 'DIRECTOR' or 'MECHANIC'
     };
   });
 
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTabState] = useState('dashboard');
+  const MECHANIC_TABS = ['dashboard', 'profiling', 'bookings', 'health', 'maintenance', 'auditing', 'profile'];
+  const setActiveTab = (tab) => {
+    if (settings.currentRole === 'MECHANIC' && !MECHANIC_TABS.includes(tab)) {
+      setActiveTabState('dashboard');
+      return;
+    }
+    setActiveTabState(tab);
+  };
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return localStorage.getItem('flt_sidebar_collapsed') === 'true';
   });
   const [globalSearch, setGlobalSearch] = useState('');
+  const [focusedHealthVehicleId, setFocusedHealthVehicleId] = useState(null);
+  const [focusedProfileVehicleId, setFocusedProfileVehicleId] = useState(null);
 
   const toggleSidebar = () => {
     setSidebarCollapsed(prev => {
@@ -217,6 +309,10 @@ export const FleetProvider = ({ children }) => {
   }, [drivers]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.INCIDENTS, JSON.stringify(incidentReports));
+  }, [incidentReports]);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
     document.documentElement.classList.toggle('senior-mode', settings.seniorMode);
     document.documentElement.classList.toggle('high-contrast', settings.highContrast);
@@ -232,8 +328,110 @@ export const FleetProvider = ({ children }) => {
   };
 
   const setRole = (newRole) => {
-    setSettings(prev => ({ ...prev, currentRole: newRole }));
-    logAuditEvent('Role Switched', 'SECURITY_AUTH', `Session role changed to ${newRole}`);
+    const normalizedRole = newRole === 'MECHANIC' ? 'MECHANIC' : 'DIRECTOR';
+    setSettings(prev => ({
+      ...prev,
+      currentRole: normalizedRole,
+      currentMechanic: prev.currentMechanic || (editables.mechanics?.[0] || DEFAULT_EDITABLES.mechanics[0])
+    }));
+    if (normalizedRole === 'MECHANIC' && !MECHANIC_TABS.includes(activeTab)) {
+      setActiveTabState('dashboard');
+    } else if (normalizedRole !== 'MECHANIC' && activeTab === 'profile') {
+      setActiveTabState('dashboard');
+    }
+    logAuditEvent('Role Switched', 'SECURITY_AUTH', `Session role changed to ${normalizedRole}`);
+  };
+
+  const setCurrentMechanic = (mechanicName) => {
+    setSettings(prev => ({ ...prev, currentMechanic: mechanicName }));
+    logAuditEvent('Active Mechanic Switched', 'SECURITY_AUTH', `Active mechanic view set to ${mechanicName}`);
+  };
+
+  const updateMechanicProfile = ({
+    name,
+    specialty,
+    phone,
+    email,
+    department,
+    branchId,
+    category,
+    employeeId,
+    licenseNo
+  }) => {
+    const cleanName = (name || '').trim();
+    const cleanPhone = (phone || '').trim();
+    if (!cleanName) return false;
+
+    const currentFull = settings.currentMechanic || DEFAULT_EDITABLES.mechanics[0];
+    const openParen = currentFull.indexOf('(');
+    const oldShort = (openParen >= 0 ? currentFull.slice(0, openParen) : currentFull).trim();
+    const oldNorm = oldShort.toLowerCase();
+    const oldSpecialty = openParen >= 0 ? currentFull.slice(openParen + 1).replace(/\)$/, '').trim() : '';
+    const cleanSpecialty = specialty !== undefined ? specialty.trim() : oldSpecialty;
+    const specialtySuffix = cleanSpecialty ? ` (${cleanSpecialty})` : '';
+    const newFull = `${cleanName}${specialtySuffix}`;
+
+    const applyDriverUpdates = (d) => ({
+      ...d,
+      name: cleanName,
+      phone: cleanPhone || d.phone,
+      ...(cleanSpecialty ? { title: cleanSpecialty, role: cleanSpecialty } : {}),
+      ...(email !== undefined ? { email: email.trim() } : {}),
+      ...(department ? { department } : {}),
+      ...(branchId ? { branchId } : {}),
+      ...(category ? { category } : {}),
+      ...(employeeId !== undefined && employeeId.trim() ? { employeeId: employeeId.trim() } : {}),
+      ...(licenseNo !== undefined ? { licenseNo: licenseNo.trim() } : {})
+    });
+
+    setDrivers(prev => prev.map(d => {
+      if ((d.name || '').trim().toLowerCase() === oldNorm) {
+        return applyDriverUpdates(d);
+      }
+      return d;
+    }));
+
+    setSelectedDriver(prev => {
+      if (prev && (prev.name || '').trim().toLowerCase() === oldNorm) {
+        return applyDriverUpdates(prev);
+      }
+      return prev;
+    });
+
+    setSettings(prev => ({ ...prev, currentMechanic: newFull }));
+
+    setEditables(prev => ({
+      ...prev,
+      mechanics: (prev.mechanics || []).map(m =>
+        m.split(' (')[0].trim().toLowerCase() === oldNorm ? newFull : m
+      )
+    }));
+
+    setWorkOrders(prev => prev.map(w =>
+      (w.assignedMechanic || '').split(' (')[0].trim().toLowerCase() === oldNorm
+        ? { ...w, assignedMechanic: newFull }
+        : w
+    ));
+
+    setBookings(prev => prev.map(b =>
+      b.type === 'MAINTENANCE' && (b.driver || '').split(' (')[0].trim().toLowerCase() === oldNorm
+        ? { ...b, driver: newFull }
+        : b
+    ));
+
+    setVehicles(prev => prev.map(v => ({
+      ...v,
+      diagnostics: Array.isArray(v.diagnostics)
+        ? v.diagnostics.map(diag =>
+            (diag.assignedPerson || '').split(' (')[0].trim().toLowerCase() === oldNorm
+              ? { ...diag, assignedPerson: newFull }
+              : diag
+          )
+        : v.diagnostics
+    })));
+
+    logAuditEvent('Mechanic Profile Updated', 'SECURITY_AUTH', `Updated profile for ${oldShort} → ${cleanName} (${cleanPhone || 'no phone change'}).`);
+    return true;
   };
 
   const checkPermission = (allowedRoles, actionTitle) => {
@@ -245,10 +443,10 @@ export const FleetProvider = ({ children }) => {
   };
 
   const logAuditEvent = (action, category, details, status = 'AUTHORIZED') => {
+    const activeMechShort = (settings.currentMechanic || DEFAULT_EDITABLES.mechanics[0]).split(' (')[0].trim();
     const roleTitles = {
       DIRECTOR: 'Fleet Operations Director (Engr. R. Alcantara)',
-      DISPATCHER: 'Branch Dispatcher (S. Gomez)',
-      MAINTENANCE: 'Motorpool Maintenance Officer (J. Dela Cruz)'
+      MECHANIC: `Assigned Mechanic (${activeMechShort})`
     };
 
     const newLog = {
@@ -301,9 +499,21 @@ export const FleetProvider = ({ children }) => {
 
     const woId = `REP-2026-${String(workOrders.length + 95).padStart(3, '0')}`;
     const initialStage = woData.currentStage || 'Queued / Inspection';
+    const rawChecklist = Array.isArray(woData.checklist) && woData.checklist.length > 0
+      ? woData.checklist
+      : [woData.type || 'Inspection & Servicing'];
+    const checklistItems = Array.isArray(woData.checklistItems) && woData.checklistItems.length > 0
+      ? woData.checklistItems
+      : rawChecklist.map((label, idx) => ({
+          id: `CHK-${Date.now()}-${idx}`,
+          label,
+          done: initialStage === 'Completed / Released'
+        }));
+
     const newWO = {
       id: woId,
       ...woData,
+      checklistItems,
       status: initialStage === 'Completed / Released' ? 'Completed / Released' : 'In Shop',
       currentStage: initialStage,
       dateReported: new Date().toISOString().substring(0, 10),
@@ -363,7 +573,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const updateWorkOrderStage = (woId, newStage, updates = {}) => {
-    if (!checkPermission(['DIRECTOR', 'DISPATCHER', 'MAINTENANCE'], 'Update Maintenance Stage')) return false;
+    if (!checkPermission(['DIRECTOR', 'MECHANIC'], 'Update Maintenance Stage')) return false;
 
     const targetWO = workOrders.find(w => w.id === woId);
     if (!targetWO) return false;
@@ -446,6 +656,86 @@ export const FleetProvider = ({ children }) => {
       'Maintenance Stage Updated',
       'MAINTENANCE',
       `Updated ${targetWO.vehicleCode} (${woId}) stage to "${newStage}".`
+    );
+    return true;
+  };
+
+  const archiveCompletedWorkOrder = (woId) => {
+    if (!checkPermission(['DIRECTOR', 'MECHANIC'], 'Archive Completed Maintenance')) return false;
+    const targetWO = workOrders.find(w => w.id === woId);
+    if (!targetWO) return false;
+
+    const today = new Date().toISOString().substring(0, 10);
+    const v = vehicles.find(veh => veh.code === targetWO.vehicleCode);
+
+    setWorkOrders(prev => prev.map(w =>
+      w.id === woId
+        ? {
+            ...w,
+            status: 'Completed / Released',
+            currentStage: 'Completed / Released',
+            dateCompleted: w.dateCompleted || today,
+            archivedFromBoard: true
+          }
+        : w
+    ));
+
+    setRepairArchive(prev => {
+      if (prev.some(r => r.woNo === woId)) return prev;
+      const voucherNo = `VCH-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+      const receiptId = `RCPT-${Math.floor(100000 + Math.random() * 900000)}`;
+      const historyRecord = {
+        id: voucherNo,
+        voucherNo,
+        receiptId,
+        woNo: woId,
+        date: targetWO.dateCompleted || today,
+        vehicleCode: targetWO.vehicleCode,
+        plateNo: targetWO.plateNo || v?.plateNo || 'N/A',
+        branchId: targetWO.branchId || v?.branchId || 'BR-KID',
+        facility: targetWO.facility || 'COTELCO Central Motorpool',
+        serviceType: targetWO.type || 'Maintenance Service',
+        laborCost: 0,
+        partsCost: 0,
+        totalCost: Number(targetWO.incurredCost) || 0,
+        partsReplaced: (targetWO.checklistItems || []).map(i => i.label).join(', ') || targetWO.type,
+        approvedBy: 'Engr. Roberto M. Alcantara (Fleet Operations Director)'
+      };
+      return [historyRecord, ...prev];
+    });
+
+    logAuditEvent(
+      'Maintenance Archived to History',
+      'MAINTENANCE',
+      `Archived completed maintenance ${targetWO.vehicleCode} (${woId}) to Repair History.`
+    );
+    return true;
+  };
+
+  const deleteWorkOrder = (woId) => {
+    if (!checkPermission(['DIRECTOR'], 'Delete Maintenance Work Order')) return false;
+    const targetWO = workOrders.find(w => w.id === woId);
+    if (!targetWO) return false;
+
+    const remainingWOs = workOrders.filter(w => w.id !== woId);
+    setWorkOrders(remainingWOs);
+    setBookings(prev => prev.filter(b => b.id !== `BK-${woId}`));
+
+    const stillInShop = remainingWOs.some(
+      w => w.vehicleCode === targetWO.vehicleCode && w.status !== 'Completed / Released' && w.currentStage !== 'Completed / Released'
+    );
+    if (!stillInShop) {
+      setVehicles(prev => prev.map(v =>
+        v.code === targetWO.vehicleCode
+          ? { ...v, status: 'ACTIVE', statusReason: 'Active Fleet Deployment' }
+          : v
+      ));
+    }
+
+    logAuditEvent(
+      'Work Order Deleted',
+      'MAINTENANCE',
+      `Deleted work order ${woId} (${targetWO.vehicleCode} — ${targetWO.type}).`
     );
     return true;
   };
@@ -612,8 +902,14 @@ export const FleetProvider = ({ children }) => {
       branch: targetBranch?.name || entryData.branch || 'Central Operations Headquarters',
       branchId: targetBranch?.id || targetVehicle?.branchId || 'BR-KID',
       facility: entryData.facility?.trim() || 'Central Motorpool & Testing Facility',
-      serviceType: entryData.serviceType?.trim() || 'Maintenance Service Expense',
-      serviceSummary: entryData.serviceSummary?.trim() || entryData.serviceType?.trim() || 'Motorpool parts & service expenditure',
+      repairScope: entryData.repairScope || (String(entryData.facility || '').toLowerCase().includes('motorpool') ? 'IN_HOUSE' : 'OUTSIDE'),
+      receiptImage: entryData.receiptImage || null,
+      fileName: entryData.fileName || null,
+      fileType: entryData.fileType || null,
+      fileSize: entryData.fileSize || null,
+      fileDataUrl: entryData.fileDataUrl || null,
+      serviceType: entryData.serviceType?.trim() || 'Fleet Report',
+      serviceSummary: entryData.serviceSummary?.trim() || entryData.serviceType?.trim() || 'Uploaded vehicle report',
       laborCost,
       partsCost,
       totalCost,
@@ -629,12 +925,57 @@ export const FleetProvider = ({ children }) => {
     setRepairArchive(prev => [newVoucher, ...prev]);
 
     logAuditEvent(
-      'Ledger Entry Added',
-      'FINANCIAL_AUDIT',
-      `Recorded expense voucher ${voucherNo} on ${newVoucher.vehicleCode}. Amount: ₱${totalCost.toLocaleString()}`
+      'Service Report Added',
+      'OPERATIONS_REPORT',
+      `Recorded service report ${voucherNo} on ${newVoucher.vehicleCode} (${newVoucher.facility}).`
     );
 
     return newVoucher;
+  };
+
+  const addIncidentReport = (reportData) => {
+    const targetVehicle = vehicles.find(v => v.code === reportData.vehicleCode || v.id === reportData.vehicleId);
+    const targetBranch = branches.find(b => b.id === (reportData.branchId || targetVehicle?.branchId || 'BR-KID'));
+
+    const newIncident = {
+      id: `INC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      vehicleCode: targetVehicle?.code || reportData.vehicleCode || 'N/A',
+      plateNo: targetVehicle?.plateNo || reportData.plateNo || 'N/A',
+      model: targetVehicle?.makeModel || reportData.model || 'Utility Vehicle',
+      branchId: targetBranch?.id || targetVehicle?.branchId || 'BR-KID',
+      branch: targetBranch?.municipality || targetBranch?.name || 'Kidapawan District',
+      driverName: (reportData.driverName || '').trim() || targetVehicle?.assignedDriver || 'Field Driver',
+      date: reportData.date || new Date().toISOString().substring(0, 10),
+      time: reportData.time || new Date().toTimeString().slice(0, 5),
+      location: (reportData.location || '').trim() || 'Field Route',
+      category: reportData.category || 'Mechanical Breakdown',
+      severity: reportData.severity || 'Medium',
+      odometerKm: reportData.odometerKm ? Number(reportData.odometerKm) : (targetVehicle?.odometerKm || 0),
+      notes: (reportData.notes || '').trim(),
+      photoUrl: reportData.photoUrl || null,
+      status: 'Open',
+      createdAt: new Date().toISOString()
+    };
+
+    setIncidentReports(prev => [newIncident, ...prev]);
+    logAuditEvent(
+      'Driver Incident Reported',
+      'INCIDENT_REPORT',
+      `${newIncident.driverName} filed ${newIncident.severity} incident (${newIncident.category}) on ${newIncident.vehicleCode} at ${newIncident.location}.`
+    );
+    return newIncident;
+  };
+
+  const updateIncidentReportStatus = (incidentId, status) => {
+    setIncidentReports(prev =>
+      prev.map(inc => (inc.id === incidentId ? { ...inc, status } : inc))
+    );
+    logAuditEvent('Incident Status Updated', 'INCIDENT_REPORT', `Updated incident ${incidentId} status to ${status}.`);
+  };
+
+  const deleteIncidentReport = (incidentId) => {
+    setIncidentReports(prev => prev.filter(inc => inc.id !== incidentId));
+    logAuditEvent('Incident Report Removed', 'INCIDENT_REPORT', `Removed incident report ${incidentId}.`);
   };
 
   const addVehicle = (vehicleData) => {
@@ -696,7 +1037,52 @@ export const FleetProvider = ({ children }) => {
     setVehicles(prev => prev.map(v => {
       if (v.id === id) {
         const mergedSpecs = updates.specs ? { ...(v.specs || {}), ...updates.specs } : v.specs;
-        const updated = { ...v, ...updates, specs: mergedSpecs };
+        let nextRegHistory = updates.registrationHistory || v.registrationHistory || [];
+
+        if (!updates.registrationHistory) {
+          const regChanged =
+            (updates.registrationAcquiredDate && updates.registrationAcquiredDate !== v.registrationAcquiredDate) ||
+            (updates.registrationExpiryDate && updates.registrationExpiryDate !== v.registrationExpiryDate);
+          const insChanged =
+            (updates.insuranceAcquiredDate && updates.insuranceAcquiredDate !== v.insuranceAcquiredDate) ||
+            (updates.insuranceExpiryDate && updates.insuranceExpiryDate !== v.insuranceExpiryDate);
+
+          if (regChanged) {
+            nextRegHistory = [
+              {
+                id: `REG-HIST-${Date.now()}-LTO`,
+                type: 'LTO Registration (OR/CR)',
+                referenceNo: updates.orCrNo || v.orCrNo || 'OR/CR Renewal',
+                dateAcquired: updates.registrationAcquiredDate || v.registrationAcquiredDate,
+                expiryDate: updates.registrationExpiryDate || v.registrationExpiryDate,
+                agency: 'LTO District Office',
+                status: 'Active'
+              },
+              ...nextRegHistory
+            ];
+          }
+          if (insChanged) {
+            nextRegHistory = [
+              {
+                id: `REG-HIST-${Date.now()}-INS`,
+                type: 'Comprehensive Fleet Insurance',
+                referenceNo: `GSIS-POL-${v.code}`,
+                dateAcquired: updates.insuranceAcquiredDate || v.insuranceAcquiredDate,
+                expiryDate: updates.insuranceExpiryDate || v.insuranceExpiryDate,
+                agency: 'GSIS / Commercial Fleet Insurer',
+                status: 'Active'
+              },
+              ...nextRegHistory
+            ];
+          }
+        }
+
+        const updated = {
+          ...v,
+          ...updates,
+          specs: mergedSpecs,
+          registrationHistory: nextRegHistory
+        };
         targetVeh = updated;
         if (selectedVehicle && selectedVehicle.id === id) {
           setSelectedVehicle(updated);
@@ -749,7 +1135,23 @@ export const FleetProvider = ({ children }) => {
       return v;
     }
 
-    return { ...v, authorizedDriverIds: updatedIds };
+    const d = drivers.find(item => item.id === driverId);
+    const today = new Date().toISOString().substring(0, 10);
+    const isGrant = mode === 'grant' || (mode === 'toggle' && !exists);
+    const historyEntry = {
+      id: `DH-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      driverId: d?.id || driverId,
+      driverName: d?.name || driverId,
+      employeeId: d?.employeeId || 'EMP',
+      title: d?.title || d?.role || 'Authorized Operator',
+      department: d?.department || 'Technical / Engineering',
+      action: isGrant ? 'AUTHORIZED' : 'PAST_ASSIGNED',
+      date: today,
+      note: isGrant ? 'Authorized for vehicle operation' : 'Previously authorized operator (access ended)'
+    };
+    const prevHistory = Array.isArray(v.driverHistory) ? v.driverHistory : [];
+
+    return { ...v, authorizedDriverIds: updatedIds, driverHistory: [historyEntry, ...prevHistory] };
   };
 
   const syncSelectedVehicleAccess = (vehicleId, driverId, mode) => {
@@ -862,7 +1264,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const updateDriver = (id, updates) => {
-    if (!checkPermission(['DIRECTOR', 'DISPATCHER'], 'Update Driver Record')) return false;
+    if (!checkPermission(['DIRECTOR'], 'Update Driver Record')) return false;
 
     setDrivers(prev => prev.map(d => {
       if (d.id === id) {
@@ -878,6 +1280,8 @@ export const FleetProvider = ({ children }) => {
       }
       return d;
     }));
+
+    setSelectedDriver(prev => (prev && prev.id === id ? { ...prev, ...updates } : prev));
 
     logAuditEvent('Driver Updated', 'DISPATCH', `Updated driver record ${id}`);
     return true;
@@ -1046,7 +1450,8 @@ export const FleetProvider = ({ children }) => {
       setSettings({
         seniorMode: false,
         highContrast: false,
-        currentRole: 'DIRECTOR'
+        currentRole: 'DIRECTOR',
+        currentMechanic: DEFAULT_EDITABLES.mechanics[0]
       });
       localStorage.clear();
       alert('System successfully restored to default demonstration data.');
@@ -1070,6 +1475,10 @@ export const FleetProvider = ({ children }) => {
       toggleSidebar,
       globalSearch,
       setGlobalSearch,
+      focusedHealthVehicleId,
+      setFocusedHealthVehicleId,
+      focusedProfileVehicleId,
+      setFocusedProfileVehicleId,
       selectedVehicle,
       setSelectedVehicle,
       selectedBooking,
@@ -1085,14 +1494,22 @@ export const FleetProvider = ({ children }) => {
       toggleSeniorMode,
       toggleHighContrast,
       setRole,
+      setCurrentMechanic,
+      updateMechanicProfile,
       checkPermission,
       reassignVehicle,
       createWorkOrder,
       updateWorkOrderStage,
+      archiveCompletedWorkOrder,
+      deleteWorkOrder,
       completeWorkOrder,
       upsertVehicleDiagnostic,
       removeVehicleDiagnostic,
       addLedgerEntry,
+      incidentReports,
+      addIncidentReport,
+      updateIncidentReportStatus,
+      deleteIncidentReport,
       addVehicle,
       updateVehicle,
       toggleVehicleAccess,
