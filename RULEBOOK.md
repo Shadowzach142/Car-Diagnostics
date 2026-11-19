@@ -36,7 +36,9 @@ COTELCO/
     ├── data/
     │   └── fleetData.js         # Seed data (DEFAULT_*), constants, relational helper functions
     ├── utils/
-    │   └── formatters.js        # Pure formatting/parsing helpers
+    │   ├── formatters.js        # Pure formatting/parsing helpers
+    │   ├── vehicleHealth.js     # Shared diagnostic evaluator (evaluateDiagnostic, parseLocalYmd)
+    │   └── healthScore.js       # Derived Vehicle Health Score model (pure, never stored)
     └── components/
         ├── Sidebar.jsx, TopBar.jsx          # Navigation + header (PAGE_META titles live in TopBar)
         ├── Dashboard.jsx                    # tab: dashboard
@@ -75,6 +77,13 @@ COTELCO/
 - Configurable dropdown lists (`departments`, `jobTitles`, `employeeClassifications`, `vehicleClassifications`, `serviceCategories`, `mechanics`, `diagnosticTypes`) and `branches` (Stations) are managed in the **Editables** tab (`EditablesConfig.jsx`) via `FleetContext` (`addEditableItem`, `updateEditableItem`, `removeEditableItem`, `addBranch`, `updateBranch`, `removeBranch`).
 - Default COTELCO Departments: `Area`, `Technical / Engineering`, `OGM - Office of the General Manager`, `Institutional Services`, `Audit Department`, `Finance`, `Core Plan`, `CPRST`.
 - Renaming an option in `EditablesConfig` automatically cascades the new name across existing employee, vehicle, diagnostic, or work order records in `FleetContext`.
+
+### Vehicle Health Score (`healthScore.js`)
+- **Derived, never stored**: `computeVehicleHealthScore(vehicle, workOrders)` in `src/utils/healthScore.js` is a pure function computed at render time — no `FleetContext` state, no localStorage migration, no SQL column (derive it in views later, e.g. from `dbo.*` joins).
+- **Weighted pillars**: diagnostics health 40% (mean of per-diagnostic `evaluateDiagnostic` bands in `vehicle.diagnostics[]`), PMS compliance 25% (`getPmsDetails`), repair burden 20% (last-365-day work orders via `wo.vehicleCode === vehicle.code`, classification-normalized), paperwork validity 15% (insurance/LTO expiry), minus status penalty (IN-SHOP −10, OFFLINE −20, `urgentAlert` −10).
+- **Grades**: ≥85 EXCELLENT, 70–84 GOOD, 55–69 FAIR, 40–54 POOR, <40 CRITICAL → `badge-success` / `badge-warning` / `badge-danger`.
+- **Shared evaluator**: `evaluateDiagnostic` + `parseLocalYmd` live in `src/utils/vehicleHealth.js` and are imported by both `OngoingHealth.jsx` and `healthScore.js` — keep one copy.
+- **UI surfaces**: Fleet Directory (table Health column + card pill), Car Profiling (card header pill + table column), Dashboard (5th "Fleet health" KPI via `.kpi-grid-5` + score badge in Needs-attention rows), VehicleDetailModal Overview tab (score box with breakdown + top 3 factors). Clicking any score pill opens the `vehicle-detail` modal.
 
 ### Ongoing Health (`OngoingHealth.jsx`) & Maintenance (`MaintenanceHub.jsx`) Sidebar Tabs
 - **Sidebar Tab 1 — `Ongoing Health` (`OngoingHealth.jsx`)**: Displays each vehicle in a clean 2-box card (`CHANGE OIL` and secondary diagnostic) showing remaining km / target date and assigned specialist. Clicking a box or `Edit Diagnostics` opens the modal to configure intervals by **Odometer (`KM`)**, **Calendar (`DATE`)**, or **Both (`BOTH`)** (`upsertVehicleDiagnostic`, `removeVehicleDiagnostic`).

@@ -2,6 +2,7 @@ import React from 'react';
 import { useFleet } from '../context/FleetContext';
 import { getVehicleImage, WORK_ORDER_STAGES } from '../data/fleetData';
 import { parseVehicleAlert } from '../utils/formatters';
+import { computeVehicleHealthScore } from '../utils/healthScore';
 import {
   Truck,
   CheckCircle2,
@@ -10,7 +11,8 @@ import {
   Search,
   AlertTriangle,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Activity
 } from 'lucide-react';
 
 const COMPLETED = 'Completed / Released';
@@ -213,6 +215,16 @@ export const Dashboard = () => {
   const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
   const openOrders = workOrders.filter(w => w.status !== COMPLETED).length;
 
+  // Derived fleet health average (pure scoring model, never stored)
+  const vehicleScores = vehicles.map(v => computeVehicleHealthScore(v, workOrders));
+  const fleetHealthAvg = vehicleScores.length
+    ? Math.round(vehicleScores.reduce((sum, s) => sum + s.score, 0) / vehicleScores.length)
+    : 0;
+  const fleetHealthTone = fleetHealthAvg >= 80 ? 'ok' : fleetHealthAvg >= 60 ? 'warn' : 'bad';
+  const fleetHealthNote = vehicleScores.length
+    ? `${vehicleScores.filter(s => s.score >= 70).length} of ${total} vehicles in good condition`
+    : 'No vehicles registered';
+
   // Most urgent first: offline, then in-shop, then active-with-alert
   const rank = { OFFLINE: 0, 'IN-SHOP': 1, ACTIVE: 2 };
   const flagged = vehicles
@@ -266,11 +278,12 @@ export const Dashboard = () => {
         </div>
       </div>
 
-      <div className="kpi-grid">
+      <div className="kpi-grid kpi-grid-5">
         <Kpi icon={Truck} tone="neutral" label="Total vehicles" value={total} note={`${branches.length} branch offices`} />
         <Kpi icon={CheckCircle2} tone="ok" label="Ready for deployment" value={active} note={`${pct(active)}% of the fleet`} />
         <Kpi icon={Wrench} tone="warn" label="In-shop or offline" value={inShop + offline} note={`${inShop} in-shop · ${offline} offline`} />
         <Kpi icon={ClipboardList} tone="lime" label="Active outside services" value={openOrders} note="At outside facilities" />
+        <Kpi icon={Activity} tone={fleetHealthTone} label="Fleet health" value={fleetHealthAvg} note={fleetHealthNote} />
       </div>
 
       <div className="dash-grid">
@@ -292,6 +305,7 @@ export const Dashboard = () => {
             {flagged.map(v => {
               const parsed = parseVehicleAlert(v);
               const branch = branches.find(b => b.id === v.branchId);
+              const health = computeVehicleHealthScore(v, workOrders);
 
               return (
                 <div key={v.id} className="alert-row">
@@ -335,6 +349,15 @@ export const Dashboard = () => {
                   {/* Short Semantic Status Badge (Max 3 words) */}
                   <span className={`badge ${parsed.badgeType}`} style={{ whiteSpace: 'nowrap', fontSize: '0.78rem' }}>
                     {parsed.badgeText}
+                  </span>
+
+                  {/* Derived Health Score Badge */}
+                  <span
+                    className={`badge ${health.badgeClass}`}
+                    style={{ whiteSpace: 'nowrap', fontSize: '0.78rem', flexShrink: 0 }}
+                    title={`Health Score: ${health.score} / 100 — ${health.gradeLabel}`}
+                  >
+                    Health {health.score}
                   </span>
 
                   {/* Zone 3: Explicit Row Action Button */}
