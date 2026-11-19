@@ -6,6 +6,7 @@ import {
   getVehicleAssetTag,
   getVehicleAuthorizedDrivers
 } from '../../data/fleetData';
+import { computeVehicleHealthScore } from '../../utils/healthScore';
 import {
   X,
   Edit3,
@@ -760,6 +761,55 @@ export const VehicleDetailModal = () => {
           {/* TAB 1: OVERVIEW & SPECS */}
           {activeProfileTab === 'overview' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+              {/* Derived Vehicle Health Score (pure model, computed at render) */}
+              {(() => {
+                const health = computeVehicleHealthScore(vehicle, workOrders);
+                const barColor =
+                  health.score >= 70 ? 'var(--ok-dot)' : health.score >= 55 ? 'var(--warn-dot)' : 'var(--bad-dot)';
+                const topFactors = health.factors.slice(0, 3);
+                return (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                      <Activity size={13} /> HEALTH SCORE
+                    </div>
+                    <div style={{ ...specCardStyle, minHeight: '132px', padding: '0.9rem 1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem' }}>
+                          <strong style={{ fontSize: '2.1rem', fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--text-main)', lineHeight: 1 }}>
+                            {health.score}
+                          </strong>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>/ 100</span>
+                          <span className={`badge ${health.badgeClass}`} style={{ fontSize: '0.72rem' }}>
+                            {health.gradeLabel}
+                          </span>
+                        </div>
+                        <div style={{ flex: 1, maxWidth: '220px', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          <div style={{ height: '8px', borderRadius: '999px', background: 'var(--bg-surface)', border: '1px solid var(--border-light)', overflow: 'hidden' }}>
+                            <div style={{ width: `${health.score}%`, height: '100%', background: barColor, borderRadius: '999px', transition: 'width 0.3s var(--ease)' }} />
+                          </div>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', alignSelf: 'flex-end' }}>
+                            {health.breakdown.diagnostics.pct}% diagnostics · {health.breakdown.pms.pct}% PMS · {health.breakdown.repairs.pct}% repairs · {health.breakdown.compliance.pct}% paperwork
+                          </span>
+                        </div>
+                      </div>
+                      {topFactors.length > 0 ? (
+                        <ul style={{ margin: 0, paddingLeft: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          {topFactors.map((f, i) => (
+                            <li key={i} style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
+                          No active issues — all tracked systems in good standing.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Technical & Utility Identifiers */}
               <div>
