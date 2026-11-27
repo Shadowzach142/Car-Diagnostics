@@ -654,6 +654,7 @@ export const DEFAULT_DRIVERS = [
     assignedVehicleCode: "FLT-BT-01",
     licenseNo: "L02-12-882910",
     licenseType: "Professional (RC 1, 2, 3)",
+    licenseAcquiredDate: "2022-08-15",
     licenseExpiry: "2027-08-15",
     phone: "0919-451-2291",
     email: "danilo.santos@cotelco.com.ph",
@@ -674,6 +675,7 @@ export const DEFAULT_DRIVERS = [
     assignedVehicleCode: "FLT-DD-01",
     licenseNo: "L02-11-773819",
     licenseType: "Professional (RC 1, 2, 3, 8)",
+    licenseAcquiredDate: "2022-05-18",
     licenseExpiry: "2027-05-18",
     phone: "0918-772-3311",
     email: "rodrigo.mendoza@cotelco.com.ph",
@@ -694,7 +696,8 @@ export const DEFAULT_DRIVERS = [
     assignedVehicleCode: "FLT-PU-01",
     licenseNo: "L02-15-449102",
     licenseType: "Professional (RC 1, 2)",
-    licenseExpiry: "2027-03-25",
+    licenseAcquiredDate: "2021-10-15",
+    licenseExpiry: "2026-10-15",
     phone: "0939-224-8855",
     email: "wilfredo.aquino@cotelco.com.ph",
     status: "ON-DUTY",
@@ -714,6 +717,7 @@ export const DEFAULT_DRIVERS = [
     assignedVehicleCode: "FLT-ER-01",
     licenseNo: "L02-16-778811",
     licenseType: "Professional (RC 1, 2)",
+    licenseAcquiredDate: "2023-01-14",
     licenseExpiry: "2028-01-14",
     phone: "0947-882-9933",
     email: "leandro.tolentino@cotelco.com.ph",
@@ -734,6 +738,7 @@ export const DEFAULT_DRIVERS = [
     assignedVehicleCode: "FLT-MC-01",
     licenseNo: "L02-17-229104",
     licenseType: "Professional (RC 1)",
+    licenseAcquiredDate: "2023-09-02",
     licenseExpiry: "2028-09-02",
     phone: "0920-331-5544",
     email: "arnel.macaraeg@cotelco.com.ph",
@@ -754,7 +759,8 @@ export const DEFAULT_DRIVERS = [
     assignedVehicleCode: "FLT-PU-02",
     licenseNo: "L02-14-663819",
     licenseType: "Professional (RC 1, 2)",
-    licenseExpiry: "2027-11-20",
+    licenseAcquiredDate: "2021-12-18",
+    licenseExpiry: "2026-12-18",
     phone: "0921-554-1188",
     email: "nestor.perez@cotelco.com.ph",
     status: "ON-DUTY",
@@ -774,6 +780,7 @@ export const DEFAULT_DRIVERS = [
     assignedVehicleCode: null,
     licenseNo: "L02-10-551204",
     licenseType: "Professional (RC 1, 2, 3)",
+    licenseAcquiredDate: "2023-04-12",
     licenseExpiry: "2028-04-12",
     phone: "0917-612-8801",
     email: "mateo.villanueva@cotelco.com.ph",
@@ -794,6 +801,7 @@ export const DEFAULT_DRIVERS = [
     assignedVehicleCode: null,
     licenseNo: "L02-13-774120",
     licenseType: "Professional (RC 1, 2, 3)",
+    licenseAcquiredDate: "2022-09-30",
     licenseExpiry: "2027-09-30",
     phone: "0918-440-1922",
     email: "rogelio.bautista@cotelco.com.ph",
@@ -814,6 +822,7 @@ export const DEFAULT_DRIVERS = [
     assignedVehicleCode: null,
     licenseNo: "L02-14-319842",
     licenseType: "Professional (RC 1, 2, 3)",
+    licenseAcquiredDate: "2023-02-19",
     licenseExpiry: "2028-02-19",
     phone: "0920-518-7734",
     email: "ernesto.solis@cotelco.com.ph",
@@ -834,6 +843,7 @@ export const DEFAULT_DRIVERS = [
     assignedVehicleCode: null,
     licenseNo: "L02-16-882411",
     licenseType: "Professional (RC 1, 2)",
+    licenseAcquiredDate: "2023-07-08",
     licenseExpiry: "2028-07-08",
     phone: "0939-881-4409",
     email: "jerome.navarro@cotelco.com.ph",
@@ -854,6 +864,7 @@ export const DEFAULT_DRIVERS = [
     assignedVehicleCode: null,
     licenseNo: "L02-17-662019",
     licenseType: "Professional (RC 1, 2)",
+    licenseAcquiredDate: "2022-12-05",
     licenseExpiry: "2027-12-05",
     phone: "0947-332-9105",
     email: "dante.soriano@cotelco.com.ph",
@@ -946,8 +957,9 @@ export const DEFAULT_WORK_ORDERS = [
     priority: "ROUTINE",
     status: "In Shop",
     currentStage: "Queued / Inspection",
+    scheduledDate: "2026-11-23",
     dateReported: "2026-11-12",
-    targetCompletion: "2026-11-18",
+    targetCompletion: "2026-11-26",
     reportedBy: "Rodrigo T. Mendoza",
     assignedMechanic: "Rogelio D. Bautista (Senior Heavy Hydraulics & Boom Mechanic)",
     facility: "COTELCO Central Motorpool & Diagnostic Bay",
@@ -956,6 +968,31 @@ export const DEFAULT_WORK_ORDERS = [
     targetKm: 50000,
     nextServiceDate: "2027-05-12",
     description: "Semi-annual hydraulic outrigger pressure check, auger gearbox oil inspection, and boom lock valve diagnostic.",
+    stages: [],
+    partsList: []
+  },
+  {
+    id: "REP-2026-093",
+    vehicleCode: "FLT-ER-01",
+    plateNo: "ZAB-7741",
+    classification: "Van",
+    branchId: "BR-KAB",
+    type: "Brake Pads & Fluid Check + Cabin A/C Inspection",
+    category: "Brakes & Suspension",
+    priority: "HIGH",
+    status: "In Shop",
+    currentStage: "Queued / Inspection",
+    scheduledDate: "",
+    dateReported: "2026-11-21",
+    targetCompletion: "",
+    reportedBy: "Leandro B. Tolentino",
+    assignedMechanic: "",
+    facility: "COTELCO Central Motorpool & Diagnostic Bay",
+    estimatedCost: 0,
+    incurredCost: 0,
+    targetKm: 32000,
+    nextServiceDate: "2027-05-21",
+    description: "Driver reported soft brake pedal feel during emergency dispatch. Needs mechanic assignment and schedule date.",
     stages: [],
     partsList: []
   },
@@ -1171,3 +1208,107 @@ export const DEFAULT_BOOKINGS = [
     status: "Confirmed"
   }
 ];
+
+/* ===========================================================================
+   Driver Trip Logs (DRIVER role)
+   Common routes are APPROXIMATE one-way road distances in km. Drivers can always
+   override the distance (Custom km / Odometer range). Maps to dbo.TripRoutes
+   (reference data) and dbo.TripLogs (transactions) in docs/BACKEND_READINESS.md.
+   =========================================================================== */
+export const COMMON_TRIP_ROUTES = [
+  { id: 'RT-KID-LOCAL', from: 'Kidapawan', to: 'Within Kidapawan (local rounds)', km: 12 },
+  { id: 'RT-KID-MAT', from: 'Kidapawan', to: 'Matalam', km: 21 },
+  { id: 'RT-KID-MAK', from: 'Kidapawan', to: 'Makilala', km: 28 },
+  { id: 'RT-KID-ANT', from: 'Kidapawan', to: 'Antipas', km: 25 },
+  { id: 'RT-KID-MAG', from: 'Kidapawan', to: 'Magpet', km: 30 },
+  { id: 'RT-KID-MLA', from: 'Kidapawan', to: "M'lang", km: 36 },
+  { id: 'RT-KID-KAB', from: 'Kidapawan', to: 'Kabacan', km: 47 },
+  { id: 'RT-KID-MID', from: 'Kidapawan', to: 'Midsayap', km: 50 },
+  { id: 'RT-KID-CAR', from: 'Kidapawan', to: 'Carmen', km: 60 },
+  { id: 'RT-KID-COT', from: 'Kidapawan', to: 'Cotabato City', km: 90 },
+  { id: 'RT-KID-DVO', from: 'Kidapawan', to: 'Davao City', km: 120 }
+];
+
+export const TRIP_PURPOSES = [
+  'Line / Feeder Inspection',
+  'Field Service / Repair Crew',
+  'Meter Reading & Collection',
+  'Official Errand / Delivery',
+  'Meeting / Training',
+  'Hauling / Materials Pickup',
+  'Other'
+];
+
+const _isoDaysAgo = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+export const DEFAULT_TRIP_LOGS = [
+  {
+    id: 'TRIP-0001',
+    vehicleId: 'VEH-001',
+    vehicleCode: 'FLT-BT-01',
+    plateNo: 'NDI-4092',
+    driverId: 'DRV-001',
+    driverName: 'Danilo C. Santos',
+    date: _isoDaysAgo(1),
+    routeId: 'RT-KID-MAT',
+    from: 'Kidapawan',
+    to: 'Matalam',
+    roundTrip: true,
+    distanceKm: 42,
+    inputMode: 'ROUTE',
+    odometerStart: null,
+    odometerEnd: null,
+    purpose: 'Line / Feeder Inspection',
+    notes: '',
+    createdAt: new Date(Date.now() - 86400000).toISOString()
+  },
+  {
+    id: 'TRIP-0002',
+    vehicleId: 'VEH-001',
+    vehicleCode: 'FLT-BT-01',
+    plateNo: 'NDI-4092',
+    driverId: 'DRV-001',
+    driverName: 'Danilo C. Santos',
+    date: _isoDaysAgo(3),
+    routeId: 'RT-KID-MAK',
+    from: 'Kidapawan',
+    to: 'Makilala',
+    roundTrip: true,
+    distanceKm: 56,
+    inputMode: 'ROUTE',
+    odometerStart: null,
+    odometerEnd: null,
+    purpose: 'Field Service / Repair Crew',
+    notes: '',
+    createdAt: new Date(Date.now() - 3 * 86400000).toISOString()
+  }
+];
+
+/* Places for the Custom From / To dropdowns. kmFromHub = approximate road km from Kidapawan (HQ).
+   Pair distance: via Kidapawan (district roads radiate from HQ). Drivers can use "Odometer range" for exact figures. */
+export const TRIP_PLACES = [
+  { id: 'Kidapawan', kmFromHub: 0 },
+  { id: 'Antipas', kmFromHub: 25 },
+  { id: 'Matalam', kmFromHub: 21 },
+  { id: 'Makilala', kmFromHub: 28 },
+  { id: 'Magpet', kmFromHub: 30 },
+  { id: "M'lang", kmFromHub: 36 },
+  { id: 'Kabacan', kmFromHub: 47 },
+  { id: 'Midsayap', kmFromHub: 50 },
+  { id: 'Carmen', kmFromHub: 60 },
+  { id: 'Cotabato City', kmFromHub: 90 },
+  { id: 'Davao City', kmFromHub: 120 }
+];
+
+export const getTripDistance = (from, to) => {
+  const a = TRIP_PLACES.find(p => p.id === from);
+  const b = TRIP_PLACES.find(p => p.id === to);
+  if (!a || !b || a.id === b.id) return 0;
+  if (a.kmFromHub === 0) return b.kmFromHub;
+  if (b.kmFromHub === 0) return a.kmFromHub;
+  return a.kmFromHub + b.kmFromHub;
+};

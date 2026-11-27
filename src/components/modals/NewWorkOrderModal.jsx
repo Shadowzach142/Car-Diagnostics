@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useFleet } from '../../context/FleetContext';
 import { WORK_ORDER_STAGES, DEFAULT_EDITABLES } from '../../data/fleetData';
 import { VehicleSelect } from '../common/VehicleSelect';
+import { PersonnelPickerField } from '../common/PersonnelPickerModal';
+import { DateRangeCalendarField } from '../common/DateRangeCalendarModal';
 import {
   X,
   Wrench,
-  UserCheck,
   Gauge,
   CalendarDays,
   Layers,
@@ -18,6 +19,7 @@ export const NewWorkOrderModal = () => {
     setModalType,
     selectedVehicle,
     vehicles,
+    drivers = [],
     editables = {},
     createWorkOrder
   } = useFleet();
@@ -30,9 +32,10 @@ export const NewWorkOrderModal = () => {
   const [category, setCategory] = useState(serviceCategories[0] || 'Preventive Maintenance (PMS)');
   const [selectedTask, setSelectedTask] = useState('');
   const [customTask, setCustomTask] = useState('');
-  const [currentStage, setCurrentStage] = useState('Active Repair / Servicing');
+  const [scheduleMode, setScheduleMode] = useState('SCHEDULED'); // 'SCHEDULED' | 'UNSCHEDULED'
+  const [currentStage, setCurrentStage] = useState('Queued / Inspection');
   const [assignedMechanic, setAssignedMechanic] = useState(mechanics[0] || '');
-  const [customMechanic, setCustomMechanic] = useState('');
+  const [scheduledDate, setScheduledDate] = useState('');
   const [priority, setPriority] = useState('ROUTINE');
 
   // Interval / Diagnostic Target Settings (KM, Date, or Both)
@@ -78,9 +81,10 @@ export const NewWorkOrderModal = () => {
       const firstTasks = tasksMap[defCat] || DEFAULT_EDITABLES.serviceTasksByCategory[defCat] || [];
       setSelectedTask(firstTasks[0] || 'Engine Oil & Oil Filter Change (5,000 km)');
       setCustomTask('');
-      setCurrentStage('Active Repair / Servicing');
-      setAssignedMechanic(mechanics[0] || 'Engr. Mateo R. Villanueva (Lead Fleet Diagnostic Specialist)');
-      setCustomMechanic('');
+      setScheduleMode('SCHEDULED');
+      setCurrentStage('Queued / Inspection');
+      setAssignedMechanic(drivers[0]?.name || mechanics[0] || 'Engr. Mateo R. Villanueva');
+      setScheduledDate(new Date().toISOString().substring(0, 10));
       setIntervalKm(5000);
       setTargetKm(odo + 5000);
       setTargetCompletion(defaultReturnDate());
@@ -114,9 +118,9 @@ export const NewWorkOrderModal = () => {
       ? (customTask.trim() || category)
       : selectedTask;
 
-    const finalMechanic = assignedMechanic === 'OTHER'
-      ? (customMechanic.trim() || 'Assigned Motorpool Specialist')
-      : assignedMechanic;
+    const isUnscheduled = scheduleMode === 'UNSCHEDULED';
+    const finalMechanic = isUnscheduled ? '' : assignedMechanic;
+    const finalStage = isUnscheduled ? 'Queued / Inspection' : currentStage;
 
     createWorkOrder({
       vehicleCode,
@@ -126,14 +130,16 @@ export const NewWorkOrderModal = () => {
       type: finalType,
       category,
       priority,
-      currentStage,
+      currentStage: finalStage,
+      isUnscheduled,
       assignedMechanic: finalMechanic,
+      scheduledDate: isUnscheduled ? '' : (scheduledDate || new Date().toISOString().substring(0, 10)),
       facility: 'COTELCO Motorpool & Diagnostic Bay',
       estimatedCost: 0,
-      targetCompletion: targetCompletion || defaultReturnDate(),
+      targetCompletion: isUnscheduled ? '' : (targetCompletion || scheduledDate || defaultReturnDate()),
       targetKm: (trackMode === 'KM' || trackMode === 'BOTH') ? Number(targetKm) : activeVeh?.nextServiceDueKm,
       nextServiceDate: (trackMode === 'DATE' || trackMode === 'BOTH') ? nextServiceDate : activeVeh?.nextServiceDueDate,
-      description: description.trim() || `${finalType} — Assigned to ${finalMechanic}`,
+      description: description.trim() || (isUnscheduled ? `${finalType} — Unscheduled (needs mechanic & date)` : `${finalType} — Assigned to ${finalMechanic}`),
       reportedBy: activeVeh?.assignedDriver || 'Operations Director'
     });
 
@@ -256,57 +262,87 @@ export const NewWorkOrderModal = () => {
               </div>
             )}
 
-            {/* 3. Assigned Repair Personnel & Current Maintenance Step */}
-            <div className="responsive-grid-2" style={{ gap: '0.75rem', marginBottom: '0.85rem' }}>
-              <div className="form-group">
-                <label className="form-label">
-                  <UserCheck size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
-                  Assigned Repair Personnel / Specialist: *
-                </label>
-                <select
-                  className="form-select"
-                  value={assignedMechanic}
-                  onChange={(e) => setAssignedMechanic(e.target.value)}
-                  required
-                >
-                  {mechanics.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                  <option value="OTHER">Other (Type repair specialist name...)</option>
-                </select>
+            {/* 3. Scheduling Mode (Scheduled vs Unscheduled) + Modern Interactive Pickers */}
+            <div style={{ marginBottom: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div>
+                <label className="form-label">Scheduling Status</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.45rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setScheduleMode('SCHEDULED')}
+                    style={{
+                      padding: '0.5rem 0.65rem',
+                      borderRadius: '8px',
+                      border: scheduleMode === 'SCHEDULED' ? '1.5px solid var(--text-main)' : '1px solid var(--border-light)',
+                      background: scheduleMode === 'SCHEDULED' ? 'var(--bg-surface-subtle)' : 'var(--bg-surface)',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      color: 'var(--text-main)'
+                    }}
+                  >
+                    Scheduled (Assign Date &amp; Mechanic)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScheduleMode('UNSCHEDULED');
+                      setCurrentStage('Queued / Inspection');
+                    }}
+                    style={{
+                      padding: '0.5rem 0.65rem',
+                      borderRadius: '8px',
+                      border: scheduleMode === 'UNSCHEDULED' ? '1.5px solid #D97706' : '1px solid var(--border-light)',
+                      background: scheduleMode === 'UNSCHEDULED' ? '#FFFBEB' : 'var(--bg-surface)',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      color: scheduleMode === 'UNSCHEDULED' ? '#B45309' : 'var(--text-main)'
+                    }}
+                  >
+                    Unscheduled (Needs Attention)
+                  </button>
+                </div>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">
-                  <Activity size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
-                  Maintenance Step / Stage: *
-                </label>
-                <select
-                  className="form-select"
-                  value={currentStage}
-                  onChange={(e) => setCurrentStage(e.target.value)}
-                  required
-                >
-                  {WORK_ORDER_STAGES.filter(s => s !== 'Completed / Released').map(st => (
-                    <option key={st} value={st}>{st}</option>
-                  ))}
-                </select>
-              </div>
+              {scheduleMode === 'SCHEDULED' && (
+                <>
+                  <PersonnelPickerField
+                    label="Assigned Repair Personnel / Specialist *"
+                    value={assignedMechanic}
+                    drivers={drivers}
+                    departments={editables.departments || []}
+                    onChange={(name) => setAssignedMechanic(name)}
+                  />
+
+                  <DateRangeCalendarField
+                    label="Schedule Duration (Start → Due) *"
+                    startDate={scheduledDate}
+                    endDate={targetCompletion}
+                    personLabel={(assignedMechanic || '').split(' (')[0]}
+                    onChange={(newStart, newEnd) => {
+                      setScheduledDate(newStart);
+                      setTargetCompletion(newEnd);
+                    }}
+                  />
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">
+                      <Activity size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                      Initial Kanban Column:
+                    </label>
+                    <select
+                      className="form-select"
+                      value={currentStage}
+                      onChange={(e) => setCurrentStage(e.target.value)}
+                    >
+                      <option value="Queued / Inspection">For Maintenance (Waiting Mechanic Confirmation)</option>
+                      <option value="Active Repair / Servicing">Under Maintenance (Start Immediately)</option>
+                    </select>
+                  </div>
+                </>
+              )}
             </div>
-
-            {assignedMechanic === 'OTHER' && (
-              <div className="form-group" style={{ marginBottom: '0.85rem' }}>
-                <label className="form-label">Specify Assigned Mechanic / Specialist: *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. Engr. R. Villanueva / External Specialist..."
-                  value={customMechanic}
-                  onChange={(e) => setCustomMechanic(e.target.value)}
-                  required
-                />
-              </div>
-            )}
 
             {/* 4. Next Change / Service Interval (Track by KM, Date, or Both) */}
             <div style={{

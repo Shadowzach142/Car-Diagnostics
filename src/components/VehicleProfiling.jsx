@@ -104,13 +104,20 @@ export const VehicleProfiling = () => {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'table'
 
+  const focusedProfileIds = Array.isArray(focusedProfileVehicleId)
+    ? focusedProfileVehicleId
+    : focusedProfileVehicleId
+    ? [focusedProfileVehicleId]
+    : [];
+
   useEffect(() => {
-    if (!focusedProfileVehicleId) return;
+    if (focusedProfileIds.length === 0) return;
     setBranchFilter('ALL');
     setCategoryFilter('ALL');
     setViewMode('cards');
+    const firstId = focusedProfileIds[0];
     const scrollTimer = setTimeout(() => {
-      const el = document.getElementById(`profiling-card-${focusedProfileVehicleId}`);
+      const el = document.getElementById(`profiling-card-${firstId}`);
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
@@ -283,7 +290,7 @@ export const VehicleProfiling = () => {
                 <div
                   key={v.id}
                   id={`profiling-card-${v.id}`}
-                  className={`data-card ${focusedProfileVehicleId === v.id ? 'health-focus-pulse' : ''}`}
+                  className={`data-card ${focusedProfileIds.includes(v.id) ? 'health-focus-pulse' : ''}`}
                   style={{
                     background: 'var(--bg-surface)',
                     border: '1px solid var(--border-light)',

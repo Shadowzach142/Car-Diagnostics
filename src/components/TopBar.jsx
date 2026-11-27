@@ -10,7 +10,12 @@ import {
   RotateCcw,
   Check,
   AlertTriangle,
-  X
+  X,
+  Activity,
+  Wrench,
+  FileText,
+  CalendarDays,
+  CheckCheck
 } from 'lucide-react';
 
 const PAGE_META = {
@@ -20,16 +25,26 @@ const PAGE_META = {
   bookings: { title: 'Calendar', subtitle: 'Dispatches & timetable' },
   health: { title: 'Ongoing Health', subtitle: 'Change oil intervals, mileage countdowns & vehicle diagnostics' },
   maintenance: { title: 'Maintenance', subtitle: 'Active maintenance steps, completed service & assigned technicians' },
-  auditing: { title: 'Reports', subtitle: 'Logs history of vehicle & driver reports' },
+  auditing: { title: 'Reports', subtitle: 'Current month vehicle & driver service reports' },
+  archive: { title: 'Archive', subtitle: 'Monthly categorized reports, maintenance history, driver dispatches & registration renewals' },
   editables: { title: 'Editables', subtitle: 'Manage departments, titles, stations & classifications' },
-  governance: { title: 'Security & Audit', subtitle: 'Role permissions & logs' },
   profile: { title: 'My Profile', subtitle: 'Mechanic profile & assigned workload' }
 };
 
 const ROLES = [
   { id: 'DIRECTOR', label: 'Operations Director' },
-  { id: 'MECHANIC', label: 'Assigned Mechanic' }
+  { id: 'MECHANIC', label: 'Assigned Mechanic' },
+  { id: 'DRIVER', label: 'Authorized Driver' }
 ];
+
+// Driver-specific wording for shared tabs
+const DRIVER_PAGE_META = {
+  dashboard: { title: 'Dashboard', subtitle: 'Your vehicles, trips & license at a glance' },
+  profiling: { title: 'Car Profiling', subtitle: 'Vehicles you are authorized to drive' },
+  bookings: { title: 'Calendar', subtitle: 'Vehicle availability & your license expiry' },
+  auditing: { title: 'Reports', subtitle: 'Your trip logs & mileage' },
+  profile: { title: 'My Profile', subtitle: 'Driver details & license' }
+};
 
 const initials = (label) =>
   label.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -37,23 +52,34 @@ const initials = (label) =>
 export const TopBar = () => {
   const {
     activeTab,
+    setActiveTab,
     settings,
     setRole,
     setCurrentMechanic,
+    setCurrentDriver,
+    activeDriver,
     toggleSeniorMode,
     toggleHighContrast,
     resetToFactoryDefaults,
     globalSearch,
     setGlobalSearch,
-    vehicles,
-    workOrders = [],
     editables = {},
-    setSelectedVehicle,
+    notifications = [],
+    unreadNotificationCount = 0,
+    markNotificationRead,
+    markAllNotificationsRead,
+    dismissNotification,
+    setFocusedHealthVehicleId,
+    setFocusedProfileVehicleId,
+    setFocusedMaintenanceIds,
+    drivers = [],
+    setSelectedDriver,
     setModalType
   } = useFleet();
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifFilter, setNotifFilter] = useState('ALL'); // 'ALL' | 'UNREAD'
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const profileRef = useRef(null);
   const notifRef = useRef(null);
@@ -91,24 +117,62 @@ export const TopBar = () => {
     }
   }, [mobileSearchOpen]);
 
-  const meta = PAGE_META[activeTab] || PAGE_META.dashboard;
   const isMechanic = settings.currentRole === 'MECHANIC';
+  const isDriver = settings.currentRole === 'DRIVER';
+  const meta = (isDriver && DRIVER_PAGE_META[activeTab]) || PAGE_META[activeTab] || PAGE_META.dashboard;
   const mechanicsList = editables.mechanics || [];
   const activeMechanic = settings.currentMechanic || mechanicsList[0] || '';
   const activeMechShort = activeMechanic.split(' (')[0].trim();
 
-  const flagged = isMechanic
-    ? vehicles.filter(v =>
-        workOrders.some(
-          wo =>
-            wo.vehicleCode === v.code &&
-            wo.status !== 'Completed / Released' &&
-            (wo.assignedMechanic || '').split(' (')[0].trim() === activeMechShort
-        )
-      )
-    : vehicles.filter(v => v.urgentAlert || v.status !== 'ACTIVE');
+  const visibleNotifications = notifFilter === 'UNREAD'
+    ? notifications.filter(n => !n.isRead)
+    : notifications;
+
+  const handleOpenNotification = (notif) => {
+    if (markNotificationRead) markNotificationRead(notif.id);
+    setNotifOpen(false);
+    if (notif.targetTab === 'profiling' && notif.targetEntityId && setFocusedProfileVehicleId) {
+      setFocusedProfileVehicleId(notif.targetEntityId);
+    } else if (notif.targetTab === 'health' && notif.targetEntityId && setFocusedHealthVehicleId) {
+      setFocusedHealthVehicleId(notif.targetEntityId);
+    } else if (notif.targetTab === 'maintenance' && notif.targetEntityId && setFocusedMaintenanceIds) {
+      setFocusedMaintenanceIds([notif.targetEntityId]);
+    } else if (notif.targetEntityType === 'DRIVER' && notif.targetEntityId) {
+      if (isDriver) {
+        // Drivers get their own profile, never the Director's employee modal
+        if (setActiveTab) setActiveTab('profile');
+        return;
+      }
+      const targetDriver = drivers.find(d => d.id === notif.targetEntityId);
+      if (targetDriver && setSelectedDriver && setModalType) {
+        setSelectedDriver(targetDriver);
+        setModalType('driver-detail');
+      }
+    }
+    if (notif.targetTab && setActiveTab) {
+      setActiveTab(notif.targetTab);
+    }
+  };
+
+  const renderNotifIcon = (notif) => {
+    const color = notif.severity === 'CRITICAL'
+      ? '#DC2626'
+      : notif.severity === 'WARNING'
+      ? '#D97706'
+      : '#475569';
+    if (notif.type === 'HEALTH_ALERT') return <Activity size={15} color={color} style={{ flexShrink: 0, marginTop: 2 }} />;
+    if (notif.type === 'MAINTENANCE') return <Wrench size={15} color={color} style={{ flexShrink: 0, marginTop: 2 }} />;
+    if (notif.type === 'SCHEDULE') return <CalendarDays size={15} color={color} style={{ flexShrink: 0, marginTop: 2 }} />;
+    if (notif.type === 'REPORT') return <FileText size={15} color={color} style={{ flexShrink: 0, marginTop: 2 }} />;
+    return <AlertTriangle size={15} color={color} style={{ flexShrink: 0, marginTop: 2 }} />;
+  };
+
   const role = ROLES.find(r => r.id === settings.currentRole) || ROLES[0];
-  const displayName = isMechanic ? (activeMechShort || role.label) : role.label;
+  const displayName = isMechanic
+    ? (activeMechShort || role.label)
+    : isDriver
+    ? (activeDriver?.name || role.label)
+    : role.label;
 
   const submitSearch = (e) => {
     e.preventDefault();
@@ -170,46 +234,160 @@ export const TopBar = () => {
             type="button"
             className="topbar-icon-btn"
             onClick={() => { setNotifOpen(o => !o); setProfileOpen(false); }}
-            aria-label={`${flagged.length} fleet alerts`}
+            aria-label={`${unreadNotificationCount} unread notifications`}
             aria-expanded={notifOpen}
           >
             <Bell size={19} />
-            {flagged.length > 0 && <span className="notification-dot">{flagged.length}</span>}
+            {unreadNotificationCount > 0 && (
+              <span className="notification-dot">
+                {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+              </span>
+            )}
           </button>
 
           {notifOpen && (
             <div className="topbar-dropdown-panel notif-dropdown">
-              <div className="dropdown-header">
-                <strong>Fleet alerts</strong>
-                <span className="badge badge-warning">{flagged.length}</span>
+              <div className="dropdown-header" style={{ flexWrap: 'wrap', gap: '0.45rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <strong>Notifications</strong>
+                  <span className={`badge ${unreadNotificationCount > 0 ? 'badge-danger' : 'badge-neutral'}`}>
+                    {unreadNotificationCount} unread
+                  </span>
+                </div>
+                {unreadNotificationCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => markAllNotificationsRead && markAllNotificationsRead()}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.74rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      padding: '2px 4px'
+                    }}
+                  >
+                    <CheckCheck size={13} /> Mark all read
+                  </button>
+                )}
               </div>
+
+              <div style={{
+                display: 'flex',
+                gap: '0.35rem',
+                padding: '0.45rem 0.85rem',
+                borderBottom: '1px solid var(--border-subtle)',
+                background: 'var(--bg-surface-subtle)'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setNotifFilter('ALL')}
+                  style={{
+                    flex: 1,
+                    padding: '0.28rem 0.5rem',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-light)',
+                    background: notifFilter === 'ALL' ? '#1E293B' : 'var(--bg-surface)',
+                    color: notifFilter === 'ALL' ? '#FFFFFF' : 'var(--text-secondary)',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  All ({notifications.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNotifFilter('UNREAD')}
+                  style={{
+                    flex: 1,
+                    padding: '0.28rem 0.5rem',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-light)',
+                    background: notifFilter === 'UNREAD' ? '#1E293B' : 'var(--bg-surface)',
+                    color: notifFilter === 'UNREAD' ? '#FFFFFF' : 'var(--text-secondary)',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Unread ({unreadNotificationCount})
+                </button>
+              </div>
+
               <div className="dropdown-body">
-                {flagged.length === 0 ? (
-                  <div className="empty-notif">All vehicles are ready.</div>
+                {visibleNotifications.length === 0 ? (
+                  <div className="empty-notif">
+                    {notifFilter === 'UNREAD' ? 'All caught up — no unread notifications.' : 'No active notifications.'}
+                  </div>
                 ) : (
-                  flagged.slice(0, 6).map(v => {
-                    const parsed = parseVehicleAlert(v);
-                    return (
-                      <div
-                        key={v.id}
-                        className="notif-item"
-                        style={{ cursor: 'default' }}
-                      >
-                        <AlertTriangle size={15} color="#D97706" style={{ flexShrink: 0, marginTop: 2 }} />
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                            <strong style={{ fontSize: '0.82rem' }}>{v.code} · {v.plateNo}</strong>
-                            <span className={`badge ${parsed.badgeType}`} style={{ fontSize: '0.68rem', padding: '0.1rem 0.4rem' }}>
-                              {parsed.badgeText}
-                            </span>
-                          </span>
-                          <span className="notif-desc" style={{ display: 'block', fontSize: '0.76rem', color: 'var(--text-muted)' }}>
-                            {parsed.issueText}
-                          </span>
+                  visibleNotifications.slice(0, 15).map(n => (
+                    <div
+                      key={n.id}
+                      className="notif-item"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleOpenNotification(n)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleOpenNotification(n);
+                        }
+                      }}
+                      style={{
+                        cursor: 'pointer',
+                        background: n.isRead ? 'transparent' : 'var(--bg-surface-subtle)',
+                        alignItems: 'flex-start'
+                      }}
+                    >
+                      {renderNotifIcon(n)}
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.35rem', marginBottom: 2 }}>
+                          <strong style={{ fontSize: '0.8rem', color: 'var(--text-main)', fontWeight: n.isRead ? 600 : 800 }}>
+                            {n.title}
+                          </strong>
+                          {!n.isRead && (
+                            <span
+                              style={{
+                                width: '7px',
+                                height: '7px',
+                                borderRadius: '50%',
+                                background: n.severity === 'CRITICAL' ? '#DC2626' : '#65A30D',
+                                flexShrink: 0
+                              }}
+                              title="Unread"
+                            />
+                          )}
                         </span>
-                      </div>
-                    );
-                  })
+                        <span className="notif-desc" style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                          {n.message}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (dismissNotification) dismissNotification(n.id);
+                        }}
+                        aria-label="Dismiss notification"
+                        title="Dismiss"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-tertiary)',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          flexShrink: 0
+                        }}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
@@ -226,7 +404,7 @@ export const TopBar = () => {
             <span className="profile-avatar-circle">{initials(displayName)}</span>
             <span className="profile-text-cluster">
               <span className="profile-user-name">{displayName}</span>
-              <span className="profile-user-role">{isMechanic ? 'Assigned Mechanic' : 'Active Role'}</span>
+              <span className="profile-user-role">{isMechanic ? 'Assigned Mechanic' : isDriver ? 'Authorized Driver' : 'Active Role'}</span>
             </span>
             <ChevronDown size={15} color="#9CA3AF" />
           </button>
@@ -242,7 +420,7 @@ export const TopBar = () => {
                     className={`role-select-item ${settings.currentRole === r.id ? 'active' : ''}`}
                     onClick={() => {
                       setRole(r.id);
-                      if (r.id !== 'MECHANIC') setProfileOpen(false);
+                      if (r.id === 'DIRECTOR') setProfileOpen(false);
                     }}
                   >
                     <span>{r.label}</span>
@@ -266,6 +444,26 @@ export const TopBar = () => {
                   >
                     {mechanicsList.map(m => (
                       <option key={m} value={m}>{m.split(' (')[0].trim()}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {isDriver && drivers.length > 0 && (
+                <div className="dropdown-section">
+                  <div className="dropdown-section-label">Active Driver</div>
+                  <select
+                    className="form-select"
+                    value={activeDriver?.id || ''}
+                    onChange={(e) => {
+                      setCurrentDriver(e.target.value);
+                      setProfileOpen(false);
+                    }}
+                    aria-label="Select active driver"
+                    style={{ fontSize: '0.8rem', minHeight: '34px' }}
+                  >
+                    {drivers.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
                     ))}
                   </select>
                 </div>

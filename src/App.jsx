@@ -6,9 +6,14 @@ import { Dashboard } from './components/Dashboard';
 import { OngoingHealth } from './components/OngoingHealth';
 import { MaintenanceHub } from './components/MaintenanceHub';
 import { RepairArchive } from './components/RepairArchive';
-import { SecurityAudit } from './components/SecurityAudit';
+import { ArchiveHub } from './components/ArchiveHub';
 import { EditablesConfig } from './components/EditablesConfig';
 import { MechanicProfile } from './components/MechanicProfile';
+import { DriverDashboard } from './components/DriverDashboard';
+import { DriverVehicles } from './components/DriverVehicles';
+import { DriverTrips } from './components/DriverTrips';
+import { DriverProfile } from './components/DriverProfile';
+import { LogTripModal } from './components/modals/LogTripModal';
 
 import { VehicleDetailModal } from './components/modals/VehicleDetailModal';
 import { ReassignModal } from './components/modals/ReassignModal';
@@ -31,8 +36,10 @@ import { EmployeeAccessModal } from './components/modals/EmployeeAccessModal';
 const AppContent = () => {
   const { activeTab, settings } = useFleet();
   const isMechanic = settings?.currentRole === 'MECHANIC';
+  const isDriver = settings?.currentRole === 'DRIVER';
   const mechanicAllowedTabs = ['dashboard', 'profiling', 'bookings', 'health', 'maintenance', 'auditing', 'profile'];
-  const effectiveTab = isMechanic && !mechanicAllowedTabs.includes(activeTab)
+  const driverAllowedTabs = ['dashboard', 'profiling', 'bookings', 'auditing', 'profile'];
+  const effectiveTab = (isMechanic && !mechanicAllowedTabs.includes(activeTab)) || (isDriver && !driverAllowedTabs.includes(activeTab))
     ? 'dashboard'
     : activeTab;
 
@@ -45,20 +52,21 @@ const AppContent = () => {
 
         <main className="main-viewport-canvas" id="main-content" tabIndex={-1}>
           <div key={effectiveTab} className="tab-page-enter">
-            {effectiveTab === 'dashboard' && <Dashboard />}
-            {effectiveTab === 'profiling' && <VehicleProfiling />}
+            {effectiveTab === 'dashboard' && (isDriver ? <DriverDashboard /> : <Dashboard />)}
+            {effectiveTab === 'profiling' && (isDriver ? <DriverVehicles /> : <VehicleProfiling />)}
             {effectiveTab === 'drivers' && <DriverRoster />}
             {effectiveTab === 'bookings' && <BookingsCalendar />}
             {effectiveTab === 'health' && <OngoingHealth />}
             {effectiveTab === 'maintenance' && <MaintenanceHub />}
-            {effectiveTab === 'auditing' && <RepairArchive />}
+            {effectiveTab === 'auditing' && (isDriver ? <DriverTrips /> : <RepairArchive />)}
+            {effectiveTab === 'archive' && <ArchiveHub />}
             {effectiveTab === 'editables' && <EditablesConfig />}
-            {effectiveTab === 'governance' && <SecurityAudit />}
-            {effectiveTab === 'profile' && <MechanicProfile />}
+            {effectiveTab === 'profile' && (isDriver ? <DriverProfile /> : <MechanicProfile />)}
           </div>
         </main>
       </div>
 
+      <LogTripModal />
       <VehicleDetailModal />
       <ReassignModal />
       <NewWorkOrderModal />

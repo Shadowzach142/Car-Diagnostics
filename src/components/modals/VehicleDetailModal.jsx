@@ -21,8 +21,23 @@ import {
   Clock,
   CheckCircle2,
   CalendarDays,
-  Camera
+  Camera,
+  FolderArchive,
+  ChevronRight,
+  ArrowLeft
 } from 'lucide-react';
+
+const getCurrentMonthKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const formatArchiveMonthLabel = (ym) => {
+  if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return 'Archived Records';
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, (m || 1) - 1, 1);
+  return `Month of ${d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+};
 
 const addYearsToDate = (dateStr, yearsToAdd) => {
   if (!dateStr) return '';
@@ -86,11 +101,13 @@ const ValidityBadge = ({ state }) => {
 
 export const VehicleDetailModal = () => {
   const {
+    settings,
     selectedVehicle,
     vehicles = [],
     modalType,
     setModalType,
     setSelectedVehicle,
+    setSelectedBooking,
     branches = [],
     drivers = [],
     workOrders = [],
@@ -100,6 +117,7 @@ export const VehicleDetailModal = () => {
     updateVehicle,
     revokeVehicleAccess
   } = useFleet();
+  const isMechanic = settings?.currentRole === 'MECHANIC';
 
   const vehicleClassifications = editables.vehicleClassifications || [
     'Bucket Truck',
@@ -110,10 +128,12 @@ export const VehicleDetailModal = () => {
     'Car / Sedan'
   ];
 
-  const [activeProfileTab, setActiveProfileTab] = useState('overview'); // 'overview' | 'drivers' | 'maintenance' | 'paperwork'
+  const [activeProfileTab, setActiveProfileTab] = useState('overview'); // 'overview' | 'drivers' | 'maintenance' | 'paperwork' | 'archive'
+  const [selectedArchiveMonth, setSelectedArchiveMonth] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formState, setFormState] = useState({});
   const photoInputRef = useRef(null);
+  const currentMonthKey = useMemo(() => getCurrentMonthKey(), []);
 
   const vehicle = vehicles.find(v => v.id === selectedVehicle?.id) || selectedVehicle;
 
@@ -154,6 +174,7 @@ export const VehicleDetailModal = () => {
       });
       setIsEditing(false);
       setActiveProfileTab('overview');
+      setSelectedArchiveMonth(null);
     }
   }, [vehicle?.id, modalType]);
 
@@ -217,7 +238,7 @@ export const VehicleDetailModal = () => {
     return logs.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   }, [vehicle, bookings, drivers]);
 
-  // Build Complete Maintenance History (workOrders + repairArchive + historical PMS baseline)
+  // Build Maintenance History (workOrders + historical PMS baseline — separated from Reports)
   const maintenanceHistory = useMemo(() => {
     if (!vehicle) return [];
     const list = [];
@@ -238,25 +259,7 @@ export const VehicleDetailModal = () => {
         });
       });
 
-    // 2. Repair Archive (Audited Historical Vouchers)
-    repairArchive
-      .filter(r => r.vehicleCode === vehicle.code)
-      .forEach(r => {
-        if (!list.some(item => item.id === r.woNo)) {
-          list.push({
-            id: r.voucherNo || r.id,
-            date: r.date || '2025-11-15',
-            title: r.serviceType || 'Periodic Maintenance & Overhaul',
-            category: 'Audited Repair Ledger',
-            specialist: r.facility || 'COTELCO Motorpool',
-            status: 'Completed',
-            isCompleted: true,
-            note: `Voucher ${r.voucherNo || r.id} • Cleared & Audited`
-          });
-        }
-      });
-
-    // 3. Historical Baseline PMS Logs from prior years
+    // 2. Historical Baseline PMS Logs from prior years
     const baseYear = Number(vehicle.year) || 2022;
     list.push(
       {
@@ -282,7 +285,24 @@ export const VehicleDetailModal = () => {
     );
 
     return list.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-  }, [vehicle, workOrders, repairArchive]);
+  }, [vehicle, workOrders]);
+
+  // Build Separate Vehicle Service Reports (repairArchive)
+  const vehicleReports = useMemo(() => {
+    if (!vehicle) return [];
+    return (repairArchive || [])
+      .filter(r => r.vehicleCode === vehicle.code)
+      .map(r => ({
+        id: r.voucherNo || r.id,
+        voucherNo: r.voucherNo || r.id,
+        date: r.date || '2025-11-15',
+        title: r.serviceType || 'Service & Maintenance Report',
+        submittedBy: (r.mechanic || 'Motorpool Staff').split(' (')[0].trim(),
+        facility: r.facility || 'COTELCO Motorpool',
+        summary: r.serviceSummary || `Voucher ${r.voucherNo || r.id}`
+      }))
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  }, [vehicle, repairArchive]);
 
   // Build Paperwork & Registration History Log
   const registrationHistoryList = useMemo(() => {
@@ -336,6 +356,77 @@ export const VehicleDetailModal = () => {
 
     return [...customLogs, ...seeded];
   }, [vehicle]);
+
+  const currentMonthDriverLogs = useMemo(
+    () => pastDriverLogs.filter(log => String(log.date || '').slice(0, 7) === currentMonthKey),
+    [pastDriverLogs, currentMonthKey]
+  );
+
+  const currentMonthMaintenance = useMemo(
+    () =>
+      maintenanceHistory.filter(
+        item => !item.isCompleted || String(item.date || '').slice(0, 7) === currentMonthKey
+      ),
+    [maintenanceHistory, currentMonthKey]
+  );
+
+  const currentMonthRegistrations = useMemo(
+    () =>
+      registrationHistoryList.filter(
+        rec => String(rec.dateAcquired || rec.expiryDate || '').slice(0, 7) === currentMonthKey
+      ),
+    [registrationHistoryList, currentMonthKey]
+  );
+
+  const archiveMonthGroups = useMemo(() => {
+    const map = new Map();
+    const ensureGroup = (ym) => {
+      const key = ym && /^\d{4}-\d{2}$/.test(ym) ? ym : 'unknown';
+      if (!map.has(key)) {
+        map.set(key, {
+          monthKey: key,
+          label: formatArchiveMonthLabel(key),
+          reports: [],
+          maintenance: [],
+          drivers: [],
+          paperwork: []
+        });
+      }
+      return map.get(key);
+    };
+
+    vehicleReports.forEach(rep => {
+      const ym = String(rep.date || '').slice(0, 7);
+      ensureGroup(ym).reports.push(rep);
+    });
+
+    maintenanceHistory.forEach(item => {
+      const ym = String(item.date || '').slice(0, 7);
+      ensureGroup(ym).maintenance.push(item);
+    });
+
+    pastDriverLogs.forEach(log => {
+      const ym = String(log.date || '').slice(0, 7);
+      ensureGroup(ym).drivers.push(log);
+    });
+
+    registrationHistoryList.forEach(rec => {
+      const ym = String(rec.dateAcquired || rec.expiryDate || '').slice(0, 7);
+      ensureGroup(ym).paperwork.push(rec);
+    });
+
+    return Array.from(map.values())
+      .map(g => ({
+        ...g,
+        totalCount: g.reports.length + g.maintenance.length + g.drivers.length + g.paperwork.length
+      }))
+      .sort((a, b) => String(b.monthKey).localeCompare(String(a.monthKey)));
+  }, [vehicleReports, maintenanceHistory, pastDriverLogs, registrationHistoryList]);
+
+  const activeArchiveGroup = useMemo(
+    () => archiveMonthGroups.find(g => g.monthKey === selectedArchiveMonth) || null,
+    [archiveMonthGroups, selectedArchiveMonth]
+  );
 
   if (modalType !== 'vehicle-detail' || !vehicle) return null;
 
@@ -473,7 +564,8 @@ export const VehicleDetailModal = () => {
     { id: 'overview', label: 'Overview & Specs' },
     { id: 'drivers', label: 'Driver History' },
     { id: 'maintenance', label: 'Maintenance' },
-    { id: 'paperwork', label: 'Paperwork & Registration' }
+    { id: 'paperwork', label: 'Paperwork & Registration' },
+    ...(!isMechanic ? [{ id: 'archive', label: `Archive (${archiveMonthGroups.length})` }] : [])
   ];
 
   return (
@@ -674,8 +766,25 @@ export const VehicleDetailModal = () => {
               </div>
             </div>
 
-            {/* Top-Right Edit & Close Actions */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+            {/* Top-Right Schedule, Edit & Close Actions */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap' }}>
+              {!isEditing && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={() => {
+                    setSelectedBooking({
+                      vehicleId: vehicle.id,
+                      vehicleCode: vehicle.code,
+                      mode: 'schedule'
+                    });
+                    setModalType('new-booking');
+                  }}
+                  title={`Add a schedule directly for ${vehicle.code}`}
+                >
+                  <Plus size={14} /> Add Schedule
+                </button>
+              )}
               {isEditing ? (
                 <>
                   <button
@@ -693,7 +802,7 @@ export const VehicleDetailModal = () => {
                     <Check size={14} /> Save Specs
                   </button>
                 </>
-              ) : (
+              ) : !isMechanic ? (
                 <button
                   type="button"
                   className="btn btn-sm btn-outline"
@@ -701,7 +810,7 @@ export const VehicleDetailModal = () => {
                 >
                   <Edit3 size={14} /> Edit Specs
                 </button>
-              )}
+              ) : null}
               <button
                 type="button"
                 className="modal-box-close"
@@ -713,12 +822,14 @@ export const VehicleDetailModal = () => {
             </div>
           </div>
 
-          {/* 4-Tab Segmented Navigation Bar (Fixed Height, Never Shifts Layout) */}
+          {/* 5-Tab Segmented Navigation Bar (Fixed Height, Never Shifts Layout) */}
           <div
             role="tablist"
             aria-label="Vehicle profile sections"
             className="modal-tabs-4"
             style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 130px), 1fr))',
               marginTop: '1.1rem',
               gap: '4px',
               background: 'var(--bg-surface-subtle)',
@@ -735,7 +846,10 @@ export const VehicleDetailModal = () => {
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  onClick={() => setActiveProfileTab(tab.id)}
+                  onClick={() => {
+                    setActiveProfileTab(tab.id);
+                    if (tab.id !== 'archive') setSelectedArchiveMonth(null);
+                  }}
                   style={{
                     height: '34px',
                     borderRadius: '7px',
@@ -987,114 +1101,128 @@ export const VehicleDetailModal = () => {
                 )}
               </div>
 
-              {/* Past Driver Assignments & Dispatch Log */}
+              {/* Past Driver Assignments & Dispatch Log (Current Month) */}
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
-                  <Clock size={13} /> PAST ASSIGNED DRIVERS &amp; DISPATCH LOG ({pastDriverLogs.length})
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                    <Clock size={13} /> THIS MONTH&apos;S DRIVER &amp; DISPATCH LOG &bull; {formatArchiveMonthLabel(currentMonthKey)} ({currentMonthDriverLogs.length})
+                  </span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                  {pastDriverLogs.map(log => (
-                    <div
-                      key={log.id}
-                      style={{
-                        ...specCardStyle,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        padding: '0.6rem 0.85rem'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0, flex: 1 }}>
-                        <span
-                          style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '50%',
-                            background: 'var(--bg-surface)',
-                            border: '1px solid var(--border-light)',
-                            color: 'var(--text-secondary)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '0.7rem',
-                            fontWeight: 800,
-                            flexShrink: 0
-                          }}
-                        >
-                          {getInitials(log.driverName)}
-                        </span>
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <div style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--text-main)' }}>
-                            {log.driverName}{' '}
-                            <span className="mono" style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>
-                              &bull; {log.employeeId}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                            {log.note}
+                {currentMonthDriverLogs.length === 0 ? (
+                  <div style={{ ...specCardStyle, color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
+                    No driver or dispatch logs recorded in {formatArchiveMonthLabel(currentMonthKey)}. Older logs are organized by month in the Archive tab.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    {currentMonthDriverLogs.map(log => (
+                      <div
+                        key={log.id}
+                        style={{
+                          ...specCardStyle,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          padding: '0.6rem 0.85rem'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0, flex: 1 }}>
+                          <span
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              background: 'var(--bg-surface)',
+                              border: '1px solid var(--border-light)',
+                              color: 'var(--text-secondary)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.7rem',
+                              fontWeight: 800,
+                              flexShrink: 0
+                            }}
+                          >
+                            {getInitials(log.driverName)}
+                          </span>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--text-main)' }}>
+                              {log.driverName}{' '}
+                              <span className="mono" style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>
+                                &bull; {log.employeeId}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                              {log.note}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <span className="badge badge-muted">
-                          {log.action === 'DISPATCH_TRIP'
-                            ? 'Trip Dispatch'
-                            : log.action === 'AUTHORIZED'
-                            ? 'Access Granted'
-                            : 'Past Operator'}
-                        </span>
-                        <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                          {log.date}
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <span className="badge badge-muted">
+                            {log.action === 'DISPATCH_TRIP'
+                              ? 'Trip Dispatch'
+                              : log.action === 'AUTHORIZED'
+                              ? 'Access Granted'
+                              : 'Past Operator'}
+                          </span>
+                          <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                            {log.date}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* TAB 3: MAINTENANCE (COMPLETE HISTORY) */}
+          {/* TAB 3: MAINTENANCE (CURRENT MONTH & ACTIVE) */}
           {activeProfileTab === 'maintenance' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.6rem' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
-                    <Wrench size={13} /> COMPLETE MAINTENANCE &amp; REPAIR HISTORY ({maintenanceHistory.length})
+                    <Wrench size={13} /> ACTIVE &amp; THIS MONTH&apos;S MAINTENANCE &bull; {formatArchiveMonthLabel(currentMonthKey)} ({currentMonthMaintenance.length})
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                  {maintenanceHistory.map(item => (
-                    <div
-                      key={item.id}
-                      style={{
-                        ...specCardStyle,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        padding: '0.65rem 0.85rem'
-                      }}
-                    >
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)' }}>
-                          {item.title}
+                {currentMonthMaintenance.length === 0 ? (
+                  <div style={{ ...specCardStyle, color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
+                    No active or completed maintenance logs in {formatArchiveMonthLabel(currentMonthKey)}. Older maintenance records are stored in the Archive tab.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    {currentMonthMaintenance.map(item => (
+                      <div
+                        key={item.id}
+                        style={{
+                          ...specCardStyle,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          padding: '0.65rem 0.85rem'
+                        }}
+                      >
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)' }}>
+                            {item.title}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            {item.specialist} &bull; {item.note}
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                          {item.specialist} &bull; {item.note}
-                        </div>
-                      </div>
 
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <span className={`badge ${item.isCompleted ? 'badge-ok' : 'badge-warn'}`}>
-                          {item.status}
-                        </span>
-                        <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                          {item.date}
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <span className={`badge ${item.isCompleted ? 'badge-ok' : 'badge-warn'}`}>
+                            {item.status}
+                          </span>
+                          <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                            {item.date}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1214,52 +1342,391 @@ export const VehicleDetailModal = () => {
                 </div>
               </div>
 
-              {/* Multi-Year Registration & Insurance History Logs */}
+              {/* Current Month Registration & Insurance Renewal Logs */}
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
-                  <CalendarDays size={13} /> REGISTRATION &amp; INSURANCE RENEWAL HISTORY ({registrationHistoryList.length})
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                    <CalendarDays size={13} /> THIS MONTH&apos;S RENEWAL LOG &bull; {formatArchiveMonthLabel(currentMonthKey)} ({currentMonthRegistrations.length})
+                  </span>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                  {registrationHistoryList.map(rec => (
-                    <div
-                      key={rec.id}
-                      style={{
-                        ...specCardStyle,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        padding: '0.65rem 0.85rem'
-                      }}
-                    >
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)' }}>
-                          {rec.type}
+                {currentMonthRegistrations.length === 0 ? (
+                  <div style={{ ...specCardStyle, color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
+                    No paperwork renewals logged in {formatArchiveMonthLabel(currentMonthKey)}. All past registration &amp; insurance records are organized in the Archive tab.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    {currentMonthRegistrations.map(rec => (
+                      <div
+                        key={rec.id}
+                        style={{
+                          ...specCardStyle,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          padding: '0.65rem 0.85rem'
+                        }}
+                      >
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)' }}>
+                            {rec.type}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            Ref: <span className="mono">{rec.referenceNo}</span> &bull; {rec.agency}
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                          Ref: <span className="mono">{rec.referenceNo}</span> &bull; {rec.agency}
+
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <span
+                            className={`badge ${
+                              rec.status === 'VALID' || rec.status === 'Active'
+                                ? 'badge-ok'
+                                : rec.status === 'EXPIRING SOON'
+                                ? 'badge-warn'
+                                : 'badge-muted'
+                            }`}
+                          >
+                            {rec.status}
+                          </span>
+                          <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                            {rec.dateAcquired} &rarr; {rec.expiryDate}
+                          </div>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <span
-                          className={`badge ${
-                            rec.status === 'VALID' || rec.status === 'Active'
-                              ? 'badge-ok'
-                              : rec.status === 'EXPIRING SOON'
-                              ? 'badge-warn'
-                              : 'badge-muted'
-                          }`}
-                        >
-                          {rec.status}
-                        </span>
-                        <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                          {rec.dateAcquired} &rarr; {rec.expiryDate}
+          {/* TAB 5: MONTHLY ARCHIVE (REPORTS, MAINTENANCE, DRIVERS & PAPERWORK BY MONTH) */}
+          {activeProfileTab === 'archive' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {!activeArchiveGroup ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                        <FolderArchive size={13} /> MONTHLY REPORTS &amp; HISTORY ARCHIVE ({archiveMonthGroups.length} MONTHS)
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.18rem' }}>
+                        Select a month below to view all maintenance reports, driver dispatches, and registration logs for that month.
+                      </div>
+                    </div>
+                  </div>
+
+                  {archiveMonthGroups.length === 0 ? (
+                    <div style={{ ...specCardStyle, color: 'var(--text-tertiary)', fontSize: '0.82rem' }}>
+                      No historical archive records found for this vehicle.
+                    </div>
+                  ) : (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 230px), 1fr))',
+                      gap: '0.75rem'
+                    }}>
+                      {archiveMonthGroups.map(group => {
+                        const isCurrent = group.monthKey === currentMonthKey;
+                        return (
+                          <button
+                            key={group.monthKey}
+                            type="button"
+                            onClick={() => setSelectedArchiveMonth(group.monthKey)}
+                            style={{
+                              textAlign: 'left',
+                              background: 'var(--bg-surface-subtle)',
+                              border: '1px solid var(--border-light)',
+                              borderRadius: '11px',
+                              padding: '0.85rem 0.95rem',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '0.55rem'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.45rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                                <div style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '8px',
+                                  background: 'var(--bg-surface)',
+                                  border: '1px solid var(--border-light)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: 'var(--text-main)',
+                                  flexShrink: 0
+                                }}>
+                                  <FolderArchive size={15} />
+                                </div>
+                                <div>
+                                  <div style={{ fontWeight: 800, fontSize: '0.86rem', color: 'var(--text-main)' }}>
+                                    {group.label}
+                                  </div>
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                    {group.totalCount} {group.totalCount === 1 ? 'Record' : 'Records'}
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                {isCurrent && (
+                                  <span className="badge badge-ok" style={{ fontSize: '0.62rem' }}>Current</span>
+                                )}
+                                <ChevronRight size={15} color="var(--text-tertiary)" />
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', paddingTop: '0.35rem', borderTop: '1px solid var(--border-light)' }}>
+                              {group.reports.length > 0 && (
+                                <span className="badge badge-muted" style={{ fontSize: '0.66rem' }}>
+                                  {group.reports.length} Report{group.reports.length === 1 ? '' : 's'}
+                                </span>
+                              )}
+                              {group.maintenance.length > 0 && (
+                                <span className="badge badge-muted" style={{ fontSize: '0.66rem' }}>
+                                  {group.maintenance.length} Maintenance History
+                                </span>
+                              )}
+                              {group.drivers.length > 0 && (
+                                <span className="badge badge-muted" style={{ fontSize: '0.66rem' }}>
+                                  {group.drivers.length} Driver History
+                                </span>
+                              )}
+                              {group.paperwork.length > 0 && (
+                                <span className="badge badge-muted" style={{ fontSize: '0.66rem' }}>
+                                  {group.paperwork.length} Paperwork
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '0.6rem',
+                    padding: '0.65rem 0.85rem',
+                    background: 'var(--bg-surface-subtle)',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: '10px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-outline"
+                        onClick={() => setSelectedArchiveMonth(null)}
+                      >
+                        <ArrowLeft size={13} /> All Archive Months
+                      </button>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                          {activeArchiveGroup.label}
+                        </div>
+                        <div style={{ fontSize: '0.73rem', color: 'var(--text-secondary)' }}>
+                          {activeArchiveGroup.totalCount} archived record{activeArchiveGroup.totalCount === 1 ? '' : 's'} for {vehicle.code}
                         </div>
                       </div>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Separate Section 1: Service Reports */}
+                  {activeArchiveGroup.reports.length > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                        <FileText size={13} /> SERVICE REPORTS ({activeArchiveGroup.reports.length})
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                        {activeArchiveGroup.reports.map(rep => (
+                          <div
+                            key={rep.id}
+                            style={{
+                              ...specCardStyle,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              padding: '0.65rem 0.85rem'
+                            }}
+                          >
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)' }}>
+                                {rep.title}
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                {rep.submittedBy} &bull; {rep.summary}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <span className="badge badge-ok">Report</span>
+                              <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                                {rep.date}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Separate Section 2: Maintenance History */}
+                  {activeArchiveGroup.maintenance.length > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                        <Wrench size={13} /> MAINTENANCE HISTORY ({activeArchiveGroup.maintenance.length})
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                        {activeArchiveGroup.maintenance.map(item => (
+                          <div
+                            key={item.id}
+                            style={{
+                              ...specCardStyle,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              padding: '0.65rem 0.85rem'
+                            }}
+                          >
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)' }}>
+                                {item.title}
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                {item.specialist} &bull; {item.note}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <span className={`badge ${item.isCompleted ? 'badge-ok' : 'badge-warn'}`}>
+                                {item.status}
+                              </span>
+                              <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                                {item.date}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Categorized Section 2: Driver & Dispatch History */}
+                  {activeArchiveGroup.drivers.length > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                        <Clock size={13} /> DRIVER &amp; DISPATCH HISTORY ({activeArchiveGroup.drivers.length})
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                        {activeArchiveGroup.drivers.map(log => (
+                          <div
+                            key={log.id}
+                            style={{
+                              ...specCardStyle,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              padding: '0.6rem 0.85rem'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0, flex: 1 }}>
+                              <span
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '50%',
+                                  background: 'var(--bg-surface)',
+                                  border: '1px solid var(--border-light)',
+                                  color: 'var(--text-secondary)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 800,
+                                  flexShrink: 0
+                                }}
+                              >
+                                {getInitials(log.driverName)}
+                              </span>
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--text-main)' }}>
+                                  {log.driverName}{' '}
+                                  <span className="mono" style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>
+                                    &bull; {log.employeeId}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                                  {log.note}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <span className="badge badge-muted">
+                                {log.action === 'DISPATCH_TRIP'
+                                  ? 'Trip Dispatch'
+                                  : log.action === 'AUTHORIZED'
+                                  ? 'Access Granted'
+                                  : 'Past Operator'}
+                              </span>
+                              <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                                {log.date}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Categorized Section 3: Paperwork & Registration History */}
+                  {activeArchiveGroup.paperwork.length > 0 && (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                        <CalendarDays size={13} /> REGISTRATION &amp; INSURANCE LOGS ({activeArchiveGroup.paperwork.length})
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                        {activeArchiveGroup.paperwork.map(rec => (
+                          <div
+                            key={rec.id}
+                            style={{
+                              ...specCardStyle,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              padding: '0.65rem 0.85rem'
+                            }}
+                          >
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)' }}>
+                                {rec.type}
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                Ref: <span className="mono">{rec.referenceNo}</span> &bull; {rec.agency}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <span
+                                className={`badge ${
+                                  rec.status === 'VALID' || rec.status === 'Active'
+                                    ? 'badge-ok'
+                                    : rec.status === 'EXPIRING SOON'
+                                    ? 'badge-warn'
+                                    : 'badge-muted'
+                                }`}
+                              >
+                                {rec.status}
+                              </span>
+                              <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                                {rec.dateAcquired} &rarr; {rec.expiryDate}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>

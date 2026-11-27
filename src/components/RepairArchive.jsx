@@ -9,7 +9,11 @@ import {
   Camera,
   FileText,
   X,
-  Eye
+  Eye,
+  FolderArchive,
+  Calendar,
+  ChevronRight,
+  ArrowLeft
 } from 'lucide-react';
 
 function formatFileSize(bytes) {
@@ -19,11 +23,24 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getCurrentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatArchiveMonthLabel(ym) {
+  if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return 'Archived Records';
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, (m || 1) - 1, 1);
+  return `Month of ${d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+}
+
 export const RepairArchive = () => {
   const {
     settings,
     repairArchive,
     setModalType,
+    setActiveTab,
     vehicles,
     branches,
     globalSearch
@@ -35,6 +52,8 @@ export const RepairArchive = () => {
   const [branchFilter, setBranchFilter] = useState('ALL');
   const [vehicleFilter, setVehicleFilter] = useState('ALL');
   const [activeReport, setActiveReport] = useState(null);
+
+  const currentMonthKey = useMemo(() => getCurrentMonthKey(), []);
 
   const rows = useMemo(() => {
     let list = [...(repairArchive || [])].sort((a, b) =>
@@ -70,7 +89,12 @@ export const RepairArchive = () => {
         r.fileName
       ].some((f) => String(f || '').toLowerCase().includes(q))
     );
-  }, [repairArchive, branchFilter, vehicleFilter, globalSearch]);
+  }, [repairArchive, branchFilter, vehicleFilter, globalSearch, isMechanic, mechNameNorm]);
+
+  const currentMonthRows = useMemo(
+    () => rows.filter((r) => String(r.date || '').slice(0, 7) === currentMonthKey),
+    [rows, currentMonthKey]
+  );
 
   const handleExportCsv = () => {
     const headers = [
@@ -88,7 +112,7 @@ export const RepairArchive = () => {
     const escapeCsv = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
     const csvRows = [
       headers.join(','),
-      ...rows.map((r) =>
+      ...currentMonthRows.map((r) =>
         [
           r.voucherNo,
           r.date,
@@ -109,10 +133,148 @@ export const RepairArchive = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cotelco-reports-history-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `cotelco-reports-${currentMonthKey}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const renderReportsTable = (tableRows, emptyMessage) => (
+    <div className="table-wrap">
+      <table className="data-table" aria-label="Reports logs history">
+        <thead>
+          <tr>
+            <th>Date &amp; ID</th>
+            <th>Vehicle</th>
+            <th>Submitted By</th>
+            <th>Report &amp; Notes</th>
+            <th>Attachment</th>
+            <th style={{ textAlign: 'right' }} className="no-print">Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tableRows.length === 0 ? (
+            <tr>
+              <td colSpan={6}>
+                <div className="empty-state">{emptyMessage}</div>
+              </td>
+            </tr>
+          ) : (
+            tableRows.map((r, i) => {
+              const v = vehicles?.find(
+                (item) => item.code === r.vehicleCode || item.plateNo === r.plateNo
+              );
+              const img = getVehicleImage(v);
+
+              return (
+                <tr key={r.voucherNo || i}>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--text-main)' }}>
+                      {r.date}
+                    </div>
+                    <span className="cell-sub mono">{r.voucherNo}</span>
+                  </td>
+
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      <img
+                        src={img}
+                        alt={r.vehicleCode}
+                        style={{
+                          width: '40px',
+                          height: '30px',
+                          objectFit: 'cover',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-subtle)',
+                          flexShrink: 0
+                        }}
+                      />
+                      <div className="vehicle-cell">
+                        <span className="vehicle-cell-title">
+                          {r.vehicleCode} &bull; {r.plateNo}
+                        </span>
+                        <span className="vehicle-cell-sub">
+                          {truncateWords(r.model, 4)} &bull; {r.branch}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td style={{ fontSize: '0.82rem' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>
+                      {(r.mechanic || 'Motorpool Staff').split(' (')[0]}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      {r.facility || 'Central Motorpool'}
+                    </div>
+                  </td>
+
+                  <td style={{ maxWidth: 320 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--text-main)', marginBottom: '0.15rem' }}>
+                      {r.serviceType || 'Fleet Report'}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '0.78rem',
+                        color: 'var(--text-muted)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: '300px'
+                      }}
+                      title={r.serviceSummary}
+                    >
+                      {r.serviceSummary}
+                    </div>
+                  </td>
+
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {r.fileDataUrl && r.fileName ? (
+                      <a
+                        href={r.fileDataUrl}
+                        download={r.fileName}
+                        className="badge badge-muted"
+                        style={{
+                          fontSize: '0.72rem',
+                          padding: '0.2rem 0.55rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                          textDecoration: 'none',
+                          color: 'var(--text-main)'
+                        }}
+                        title={`Download ${r.fileName}`}
+                      >
+                        <FileText size={12} /> {truncateWords(r.fileName, 3)}
+                      </a>
+                    ) : r.receiptImage ? (
+                      <span
+                        className="badge badge-muted"
+                        style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                      >
+                        <Camera size={12} /> Photo
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>&mdash;</span>
+                    )}
+                  </td>
+
+                  <td className="no-print" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline"
+                      onClick={() => setActiveReport(r)}
+                    >
+                      <Eye size={14} /> View
+                    </button>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <div className="page">
@@ -167,7 +329,7 @@ export const RepairArchive = () => {
         <span className="spacer" />
 
         <span className="stat-chip">
-          Reports <strong>{rows.length}</strong>
+          This Month <strong>{currentMonthRows.length}</strong>
         </span>
         <button
           type="button"
@@ -188,141 +350,31 @@ export const RepairArchive = () => {
       </div>
 
       <div className="page-body">
-        {/* Clean Logs History Table */}
-        <div className="table-wrap">
-          <table className="data-table" aria-label="Reports logs history">
-            <thead>
-              <tr>
-                <th>Date &amp; ID</th>
-                <th>Vehicle</th>
-                <th>Submitted By</th>
-                <th>Report &amp; Notes</th>
-                <th>Attachment</th>
-                <th style={{ textAlign: 'right' }} className="no-print">Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>
-                    <div className="empty-state">No reports logged yet.</div>
-                  </td>
-                </tr>
-              ) : (
-                rows.map((r, i) => {
-                  const v = vehicles?.find(
-                    (item) => item.code === r.vehicleCode || item.plateNo === r.plateNo
-                  );
-                  const img = getVehicleImage(v);
+        <div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.6rem',
+            padding: '0.65rem 0.9rem',
+            marginBottom: '0.75rem',
+            background: 'var(--bg-surface-subtle)',
+            border: '1px solid var(--border-light)',
+            borderRadius: '10px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+              <Calendar size={15} color="var(--text-main)" />
+              <span>
+                Showing reports within <strong style={{ color: 'var(--text-main)' }}>{formatArchiveMonthLabel(currentMonthKey)}</strong>
+              </span>
+            </div>
+          </div>
 
-                  return (
-                    <tr key={r.voucherNo || i}>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.84rem', color: 'var(--text-main)' }}>
-                          {r.date}
-                        </div>
-                        <span className="cell-sub mono">{r.voucherNo}</span>
-                      </td>
-
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                          <img
-                            src={img}
-                            alt={r.vehicleCode}
-                            style={{
-                              width: '40px',
-                              height: '30px',
-                              objectFit: 'cover',
-                              borderRadius: '6px',
-                              border: '1px solid var(--border-subtle)',
-                              flexShrink: 0
-                            }}
-                          />
-                          <div className="vehicle-cell">
-                            <span className="vehicle-cell-title">
-                              {r.vehicleCode} &bull; {r.plateNo}
-                            </span>
-                            <span className="vehicle-cell-sub">
-                              {truncateWords(r.model, 4)} &bull; {r.branch}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td style={{ fontSize: '0.82rem' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>
-                          {(r.mechanic || 'Motorpool Staff').split(' (')[0]}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          {r.facility || 'Central Motorpool'}
-                        </div>
-                      </td>
-
-                      <td style={{ maxWidth: 320 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--text-main)', marginBottom: '0.15rem' }}>
-                          {r.serviceType || 'Fleet Report'}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '0.78rem',
-                            color: 'var(--text-muted)',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            maxWidth: '300px'
-                          }}
-                          title={r.serviceSummary}
-                        >
-                          {r.serviceSummary}
-                        </div>
-                      </td>
-
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        {r.fileDataUrl && r.fileName ? (
-                          <a
-                            href={r.fileDataUrl}
-                            download={r.fileName}
-                            className="badge badge-muted"
-                            style={{
-                              fontSize: '0.72rem',
-                              padding: '0.2rem 0.55rem',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.3rem',
-                              textDecoration: 'none',
-                              color: 'var(--text-main)'
-                            }}
-                            title={`Download ${r.fileName}`}
-                          >
-                            <FileText size={12} /> {truncateWords(r.fileName, 3)}
-                          </a>
-                        ) : r.receiptImage ? (
-                          <span
-                            className="badge badge-muted"
-                            style={{ fontSize: '0.72rem', padding: '0.2rem 0.55rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
-                          >
-                            <Camera size={12} /> Photo
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>&mdash;</span>
-                        )}
-                      </td>
-
-                      <td className="no-print" style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline"
-                          onClick={() => setActiveReport(r)}
-                        >
-                          <Eye size={14} /> View
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+          {renderReportsTable(
+            currentMonthRows,
+            `No reports logged in ${formatArchiveMonthLabel(currentMonthKey)} yet. Check the Archive tab in the sidebar for previous months.`
+          )}
         </div>
       </div>
 

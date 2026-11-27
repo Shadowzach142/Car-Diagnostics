@@ -1465,8 +1465,9 @@ html.high-contrast .data-table td { border-bottom-color: #9CA3AF; }
   padding: 0;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
-  min-height: 560px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -1478,21 +1479,22 @@ html.high-contrast .data-table td { border-bottom-color: #9CA3AF; }
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 1rem;
-  padding: 1.1rem 1.6rem;
+  gap: 0.65rem;
+  padding: 0.65rem 1.1rem;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-surface);
+  flex-shrink: 0;
 }
 
 .calendar-header-left {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: 0.65rem;
 }
 
 .calendar-icon-circle {
-  width: 42px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   border: 1.5px solid var(--border-medium);
   background: var(--bg-surface);
@@ -1503,7 +1505,7 @@ html.high-contrast .data-table td { border-bottom-color: #9CA3AF; }
 }
 
 .calendar-title-text {
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 800;
   color: #4D5E09;
   letter-spacing: -0.01em;
@@ -1560,6 +1562,36 @@ html.high-contrast .calendar-title-text {
   min-height: 0;
   overflow-x: auto;
   overflow-y: auto;
+}
+
+.calendar-month-agenda-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 305px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.calendar-agenda-sidebar {
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 1020px) {
+  .calendar-month-agenda-layout {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+  .calendar-agenda-sidebar {
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+  }
 }
 
 /* --- Week Timetable Grid --- */
@@ -1733,14 +1765,20 @@ html.high-contrast .calendar-title-text {
 /* --- Month View --- */
 .month-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(130px, 1fr));
-  min-width: 800px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .month-grid {
+    min-width: 640px;
+  }
 }
 
 .month-grid-header {
-  padding: 0.75rem 0.5rem;
+  padding: 0.45rem 0.4rem;
   text-align: center;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 800;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-subtle);
@@ -1748,13 +1786,13 @@ html.high-contrast .calendar-title-text {
 }
 
 .month-cell {
-  min-height: 110px;
+  min-height: 88px;
   border-right: 1px solid var(--border-subtle);
   border-bottom: 1px solid var(--border-subtle);
-  padding: 6px 8px;
+  padding: 5px 7px;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.3rem;
   background: var(--bg-surface);
   cursor: pointer;
   transition: background 0.15s ease;
@@ -1770,8 +1808,7 @@ html.high-contrast .calendar-title-text {
 }
 
 .month-cell.today {
-  background: rgba(15, 23, 42, 0.03);
-  box-shadow: inset 0 0 0 2px #0F172A;
+  background: rgba(22, 163, 74, 0.04);
 }
 
 .month-cell-head {
@@ -1807,7 +1844,7 @@ html.high-contrast .calendar-title-text {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .month-event-chip {
@@ -2745,6 +2782,32 @@ html.high-contrast .calendar-title-text {
 }
 
 .btn-go-maintenance:active {
+  transform: scale(0.97);
+}
+
+.kpi-card[role="button"] {
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.kpi-card[role="button"]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
+.kpi-card[role="button"]:active {
+  transform: scale(0.985);
+}
+
+.btn-dash-action {
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.btn-dash-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.07);
+}
+
+.btn-dash-action:active {
   transform: scale(0.97);
 }
 

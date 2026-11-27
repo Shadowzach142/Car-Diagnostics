@@ -7,7 +7,7 @@ import {
   Activity,
   Wrench,
   FileText,
-  ShieldCheck,
+  FolderArchive,
   Users,
   User,
   Sliders,
@@ -17,18 +17,31 @@ import {
 
 const COMPLETED = 'Completed / Released';
 
+const isExpiringOrExpired = (expiryStr) => {
+  if (!expiryStr) return false;
+  const exp = new Date(expiryStr);
+  if (isNaN(exp)) return false;
+  const diffDays = Math.ceil((exp - new Date()) / (1000 * 60 * 60 * 24));
+  return diffDays <= 90;
+};
+
 export const Sidebar = () => {
   const {
     activeTab,
     setActiveTab,
     sidebarCollapsed,
     toggleSidebar,
+    vehicles = [],
+    drivers = [],
     workOrders,
     bookings,
-    settings
+    settings,
+    activeDriver,
+    driverVehicles = []
   } = useFleet();
 
   const isMechanic = settings?.currentRole === 'MECHANIC';
+  const isDriver = settings?.currentRole === 'DRIVER';
   const mechShort = (settings?.currentMechanic || '').split(' (')[0].trim().toLowerCase();
 
   const visibleWorkOrders = isMechanic
@@ -41,19 +54,44 @@ export const Sidebar = () => {
     : (bookings || []);
   const activeBookingsCount = visibleBookings.filter(b => b.status !== 'Completed').length;
 
+  let unresolvedDocsCount = 0;
+  if (!isMechanic) {
+    (isDriver ? driverVehicles : (vehicles || [])).forEach(v => {
+      if (isExpiringOrExpired(v.insuranceExpiryDate)) unresolvedDocsCount += 1;
+      if (isExpiringOrExpired(v.registrationExpiryDate)) unresolvedDocsCount += 1;
+    });
+  }
+
+  const unresolvedLicensesCount = !isMechanic && !isDriver
+    ? (drivers || []).filter(d => isExpiringOrExpired(d.licenseExpiry)).length
+    : 0;
+  const ownLicenseBadge = isDriver && activeDriver && isExpiringOrExpired(activeDriver.licenseExpiry) ? 1 : 0;
+
+  const driverCalendarCount = isDriver
+    ? (bookings || []).filter(b =>
+        b.status !== 'Completed' && b.status !== 'Cancelled' &&
+        driverVehicles.some(v => v.code === b.vehicleCode)
+      ).length
+    : 0;
+
   const allNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'profiling', label: 'Car Profiling', icon: Car },
-    { id: 'drivers', label: 'Employees', icon: Users },
-    { id: 'bookings', label: 'Calendar', icon: CalendarDays, badge: activeBookingsCount },
+    { id: 'profiling', label: 'Car Profiling', icon: Car, badge: unresolvedDocsCount },
+    { id: 'drivers', label: 'Employees', icon: Users, badge: unresolvedLicensesCount },
+    { id: 'bookings', label: 'Calendar', icon: CalendarDays, badge: isDriver ? driverCalendarCount : activeBookingsCount },
     { id: 'health', label: 'Ongoing Health', icon: Activity },
     { id: 'maintenance', label: 'Maintenance', icon: Wrench, badge: openOrders },
     { id: 'auditing', label: 'Reports', icon: FileText },
-    { id: 'editables', label: 'Editables', icon: Sliders },
-    { id: 'governance', label: 'Security & Audit', icon: ShieldCheck }
+    { id: 'archive', label: 'Archive', icon: FolderArchive },
+    { id: 'editables', label: 'Editables', icon: Sliders }
   ];
 
-  const navItems = isMechanic
+  const navItems = isDriver
+    ? [
+        ...allNavItems.filter(item => ['dashboard', 'profiling', 'bookings', 'auditing'].includes(item.id)),
+        { id: 'profile', label: 'My Profile', icon: User, badge: ownLicenseBadge }
+      ]
+    : isMechanic
     ? [
         ...allNavItems.filter(item => ['dashboard', 'profiling', 'bookings', 'health', 'maintenance', 'auditing'].includes(item.id)),
         { id: 'profile', label: 'My Profile', icon: User }
