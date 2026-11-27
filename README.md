@@ -1,67 +1,43 @@
-# Centralized Fleet Management System
+# COTELCO Fleet Management System
 
-A digital Fleet Management System engineered for operational tracking of utility vehicles, preventive maintenance scheduling, work order lifecycles, and geographical branch distribution.
+An enterprise utility fleet operations platform designed for **Cotabato Electric Cooperative, Inc. (COTELCO)**. Built with **React 19 + Vite 8** on the frontend and architected for **Express.js (Node.js) + Microsoft SQL Server (`mssql`)** on the backend.
 
-## Key Capabilities
+## Team Documentation & Architecture Guides
 
-1. **Centralized Vehicle Master Registry & Fleet Directory**
-   - Clean, searchable roster of all cooperative assets with branch and status filtering.
-   - Lightened, uncluttered cards and tables with pure custody reassignments (reassign branch sub-office).
-   - Removed duplicate action buttons; all new vehicle registrations belong exclusively to the dedicated **Car Profiling** workspace.
-   - Self-contained view without unexpected cross-tab redirects or clutter.
+- **[docs/TEAM_HANDOFF_NOTES.md](docs/TEAM_HANDOFF_NOTES.md)** — **Start here:** Release summary, feature walkthrough for Operations Director & Assigned Mechanic roles, UI/component standards, and backend hand-off notes.
+- **[AGENTS.md](AGENTS.md) / [RULEBOOK.md](RULEBOOK.md)** — Official workspace rulebook, navigation map, mandatory interactive pickers, MS SQL schema overview, and UI/UX guidelines (always keep both files identical).
+- **[docs/BACKEND_READINESS.md](docs/BACKEND_READINESS.md)** — Authoritative **Express.js + MS SQL Server** backend specification (`/api/v1` REST contract, RBAC scoping matrix, transactional business rules, row-to-object mappers, and full SQL Server reference DDL).
 
-2. **Dedicated Car & Vehicle Profiling Workspace**
-   - Full master-detail profiling center: interactive vehicle selector roster on the left and comprehensive technical dossier on the right.
-   - **Register New Vehicle**: Official master registration entry point with photo attachments (local file upload, preset options, direct URLs), VIN, plate number, make/model, classification, and branch custody.
-   - **Deep Technical Specifications**: VIN, Engine serial number, fuel system, transmission, drivetrain, and specialized high-voltage dielectric ratings (kV), boom reach, and outriggers.
-   - **Operational Telemetry & Milestones**: Odometer tracking with preventive maintenance target progress bars and overdue indicators.
-   - **Chain of Custody & Motor Pool Placement**: Assigned branch office, facility station manager, custodian department/pool (e.g. Operations & Maintenance Pool, Trouble Team), and real GPS coordinates. Company cars are pooled utility assets dispatched dynamically per work order and scheduled trip.
-   - **Financial Valuation & Commercial Acquisition**: Date bought / acquired, acquisition cost (PHP ₱), supplier/dealership, LTO Official Receipt / CR number, COTELCO fixed asset tag, warranty coverage, NEA straight-line depreciation, and past audited expense vouchers.
-   - **Printable Dossier**: Print official vehicle dossiers (`window.print()`) for cooperative auditing and NEA regulatory compliance.
+---
 
-3. **Bookings & Schedule Calendar (Trip & Maintenance Timetable)**
-   - Interactive timetable calendar featuring **Day**, **Week**, and **Month** views.
-   - **Week View (Timetable)**: Direct implementation matching the schedule grid with hourly slots (`07.00 am` to `05.00 pm`), day columns, and rounded lime-accented cards showing the driver's avatar, vehicle code, and scheduled activity (e.g. *Devon Lane · Vehicle Maintenance*).
-   - **Trip & Maintenance Scheduling**: Full modal workflow to schedule vehicle dispatches or book maintenance slots by date, time window, driver, and destination.
-   - **Inspection & Actions**: 1-click modal to inspect booking details, mark tasks as completed, cancel bookings, or jump directly to the vehicle profile.
+## Core Modules & Capabilities
 
-4. **Preventive Maintenance Hub & Work Orders**
-   - Real-time service milestones tracking with visual odometer progress bars.
-   - Dedicated workspace for issuing new work orders and advancing repair lifecycles across diagnostic, overhaul, and testing stages.
-   - Clean, lightweight work order cards with in-place voucher generation upon completion.
-   - Self-contained workspace without external redirect buttons to the repair ledger.
+1. **Role-Scoped Command Dashboards (`Dashboard.jsx`)**
+   - **Operations Director (`DIRECTOR`):** Action shortcuts, 4 interactive KPI cards (including red **Document & License Expiry** alerts across Vehicle Insurance, LTO Registration, and Driver's Licenses), segmented `Alerts & Health` / `In Maintenance` / `Doc & License Expiry` view, and fleet availability donut.
+   - **Assigned Mechanic (`MECHANIC`):** Generalized 4-panel all-at-once overview (`Maintenance Queue`, `Upcoming Schedules`, `Ongoing Vehicle Health`, `Done & Recent Reports`).
+2. **Car Profiling & 4-Tab Vehicle Dossier (`VehicleProfiling.jsx`, `VehicleDetailModal.jsx`)**
+   - Fleet cards with Insurance & LTO Registration validity pills, authorized personnel avatar chips, and red sidebar expiry badges.
+   - 4-tab profile modal: `Overview & Specs`, `Driver History` (bidirectional access clearance + driver log), `Maintenance`, and `Paperwork & Registration` (inline renewal + multi-year history).
+3. **Employees & Department Directory (`DriverRoster.jsx`, `DriverDetailModal.jsx`)**
+   - Clickable **Department Boxes** with employee counts, red license-expiry alert badges, and inline `+ Add department`.
+   - Full LTO Driver's License tracking (`VALID`, `EXPIRING SOON`, `EXPIRED`) with inline license renewal and archived license history.
+4. **Calendar with Drag-and-Drop & Expiry Filter (`BookingsCalendar.jsx`)**
+   - Month, Week, and Day views supporting both Director and Mechanic scheduling (`+ Add Schedule` / `Add Calendar Note`).
+   - Drag-and-drop rescheduling preserving multi-day `Start → Due` spans, automatic `SCHEDULE` diff notifications to the Director when mechanics modify schedules, and a red **`Expiry Dates Only`** filter toggle.
+5. **Ongoing Health (`OngoingHealth.jsx`)**
+   - 2-box per-vehicle diagnostic cards (`Change Oil` + secondary diagnostic) tracked by **Odometer (`KM`)**, **Calendar (`DATE`)**, or **Both (`BOTH`)** (read-only for Mechanics).
+6. **3-Column Maintenance Kanban (`MaintenanceHub.jsx`)**
+   - `For Maintenance` → `Under Maintenance` → `Done` pipeline with Scheduled vs. Unscheduled tracking.
+   - Slide-over detail drawer with `Next Service Interval` (on `Done` orders for Mechanics) and **Additional Work / Parts Replaced** tracking that automatically resets matching Ongoing Health diagnostics and appends to Reports.
+7. **Reports (`RepairArchive.jsx`), Archive (`ArchiveHub.jsx`), & Mechanic Profile (`MechanicProfile.jsx`)**
+   - Current-month outside shop and in-house motorpool reports with printable official vouchers and photo attachments.
+   - Dedicated **Archive** tab for the Director (`Reports Archive`, `Maintenance History`, `Driver History`, `Paperwork History` grouped into monthly folders) and a **`My Archive`** tab inside the Mechanic's **My Profile**.
+8. **Configurable Editables (`EditablesConfig.jsx`)**
+   - Centralized management for Departments, Job Titles, Employee/Vehicle Classifications, Service Categories & Tasks, Mechanics, Diagnostic Types, and Stations (`Branches`) with automatic rename cascading.
 
-5. **Geospatial Branch & Asset Distribution Map (Real Map System)**
-   - **Real Mapping Engine**: Interactive **Leaflet** map featuring real street networks, terrain, and satellite imagery for Cotabato Province (Kidapawan, Midsayap, M'lang, Kabacan, Makilala, Carmen).
-   - **Multi-Layer Tile Switcher**:
-     - **Clean Street (CartoDB Voyager)**: Modern enterprise styling for clear road and boundary readability.
-     - **OpenStreetMap Standard**: Complete street-level names, national highways, and geographic landmarks.
-     - **Satellite Aerial (Esri World Imagery)**: High-resolution satellite view for right-of-way and rural transmission corridor inspection.
-   - **Interactive Markers**: Real GPS coordinates for all branch sub-offices (with live vehicle counts) and color-coded status pins (`Active`, `In-Shop`, `Offline`).
-   - **Smooth Navigation**: Zoom controls, `"Fit All"` bounds auto-fit, and fly-to animation when selecting branch sub-offices from the toolbar.
-   - **Side Inspector Drawer**: Displays vehicle photo thumbnail, GPS coordinates, driver custody, and quick branch reassignment.
+---
 
-6. **Audited Repair & Expense Ledger**
-   - Printable, itemized repair vouchers and official receipts.
-   - Filterable ledger with vehicle photo thumbnails and quick-action printable vouchers.
-
-7. **Security, Governance & Audit Trail**
-   - Tamper-evident append-only audit trail logging all actions with timestamps and actor roles.
-   - Expandable log details to maintain clean, scannable table views.
-   - Role-based access control matrix (Operations Director, Branch Dispatcher, Maintenance Officer).
-
-8. **Accessibility & Senior-Friendly Design**
-   - Single-screen responsive layout with toggleable/collapsible sidebar (`232px` to `72px`).
-   - Dedicated **Large Text (Senior Mode)** and **High-Contrast Mode** toggles built into the header.
-
-## Tech Stack
-
-- **Framework**: React 18 + Vite
-- **Styling**: Modern Vanilla CSS Design System with CSS variables and lime accent theme (`#D4ED31`)
-- **Icons**: Lucide React
-- **Persistence**: Browser `localStorage` state management
-
-## Getting Started
+## Quick Start
 
 ```bash
 # Install dependencies
