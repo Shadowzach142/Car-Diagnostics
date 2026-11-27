@@ -24,8 +24,10 @@ export const BookingDetailModal = () => {
     drivers = [],
     editables = {},
     deleteBooking,
-    updateBooking
+    updateBooking,
+    settings
   } = useFleet();
+  const isDriverView = settings?.currentRole === 'DRIVER';
 
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -470,6 +472,13 @@ export const BookingDetailModal = () => {
             </div>
 
             <div className="modal-box-footer" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {isDriverView ? (
+                <>
+                  <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>View only — schedules are managed by the Operations Director.</span>
+                  <button type="button" className="btn btn-sm btn-outline" onClick={() => setModalType(null)}>Close</button>
+                </>
+              ) : (
+              <>
               <button
                 type="button"
                 className="btn btn-sm btn-outline"
@@ -497,6 +506,8 @@ export const BookingDetailModal = () => {
                   </button>
                 )}
               </div>
+              </>
+              )}
             </div>
           </>
         )}

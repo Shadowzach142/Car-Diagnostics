@@ -14,7 +14,7 @@ The COTELCO Fleet Management System is an enterprise utility fleet operations pl
 ### Architectural Tenets:
 1. **Decoupled State Management**: All business logic and mutations run through `FleetContext.jsx`. Components never mutate state directly; they dispatch actions (`grantVehicleAccess`, `revokeVehicleAccess`, `createWorkOrder`, `updateWorkOrderStage`, `completeWorkOrder`, `addVehicle`, `updateVehicle`, `addEditableItem`, etc.).
 2. **Future-Proof Data Contracts**: State objects conform to relational database normalization standards so they map directly to Microsoft SQL Server (MS SQL) tables without requiring data transformation layers.
-3. **2-Role Operational Separation**: The app supports **Operations Director (`DIRECTOR`)** and **Assigned Mechanic (`MECHANIC`)** perspectives with strict tab, record, and action scoping.
+3. **3-Role Operational Separation**: The app supports **Operations Director (`DIRECTOR`)**, **Assigned Mechanic (`MECHANIC`)**, and **Authorized Driver (`DRIVER`)** perspectives with strict tab, record, and action scoping.
 4. **Clean, Non-Flashy, Mobile-Ready Enterprise UI**: Minimalist, understated typography, neutral palettes, stable layouts (no dynamic shifting), and full mobile responsiveness (`360px`–`768px` and desktop).
 
 ---
@@ -39,7 +39,8 @@ COTELCO/
     ├── data/
     │   └── fleetData.js         # Seed data (DEFAULT_*), constants, relational helper functions
     ├── utils/
-    │   └── formatters.js        # Pure formatting/parsing helpers
+    │   ├── formatters.js        # Pure formatting/parsing helpers
+    │   └── driverHelpers.js     # Pure DRIVER-role helpers (availability, expiry state, km sums)
     └── components/
         ├── Sidebar.jsx, TopBar.jsx          # Navigation + header + mobile search (PAGE_META in TopBar)
         ├── Dashboard.jsx                    # tab: dashboard   (Operator command center / Mechanic 4-panel overview)
@@ -53,7 +54,8 @@ COTELCO/
         ├── EditablesConfig.jsx              # tab: editables   (Editables: Departments, Titles, Stations, Classifications)
         ├── MechanicProfile.jsx              # tab: profile     (label: My Profile — License + My Archive for Mechanic)
         ├── common/                          # VehicleSelect.jsx, PersonnelPickerModal.jsx, DateRangeCalendarModal.jsx
-        └── modals/                          # One file per dialog (see below)
+        ├── DriverDashboard.jsx, DriverVehicles.jsx, DriverTrips.jsx, DriverProfile.jsx   # DRIVER-role views (tabs: dashboard, profiling, auditing, profile)
+        └── modals/                          # One file per dialog (see below; LogTripModal.jsx = DRIVER trip logging)
 ```
 
 ### Navigation Map (`activeTab` → Component → Sidebar label → Role Access)
@@ -69,6 +71,21 @@ COTELCO/
 | `archive` | `ArchiveHub` | Archive | `DIRECTOR` |
 | `editables` | `EditablesConfig` | Editables | `DIRECTOR` |
 | `profile` | `MechanicProfile` | My Profile | `MECHANIC` |
+
+### Driver Role (`DRIVER`) — Tab Map
+`DRIVER` sees only **5 tabs**; shared tab ids render driver-specific components in `App.jsx`:
+
+| `activeTab` | Component for `DRIVER` | Sidebar label | Scope |
+|---|---|---|---|
+| `dashboard` | `DriverDashboard` | Dashboard | own trips/km this month, authorized-vehicle availability, own license status, upcoming schedules on own vehicles, **Log a Trip** + **Repeat last trip** |
+| `profiling` | `DriverVehicles` | Car Profiling | **only vehicles in `authorizedDriverIds`** (read-only): availability badge, odometer, Insurance/LTO pills, next schedules, **Log trip** |
+| `bookings` | `BookingsCalendar` (read-only) | Calendar | events on authorized vehicles + **own** license expiry only; no add/edit/delete/drag |
+| `auditing` | `DriverTrips` | Reports | own **trip logs** (this month / all history, CSV export) |
+| `profile` | `DriverProfile` | My Profile | own details, driver's license card (renewal stays Director-managed), vehicles I can drive; may edit **only own phone/email** (`updateOwnDriverContact`) |
+
+- **Logging a trip (`LogTripModal`, key `log-trip`)** is deliberately low-effort: when opened from a vehicle's **Log trip** button, that vehicle is locked in a compact header strip (no re-selection); distance is entered via **Common route** (separate **From** and **To** dropdowns from `TRIP_PLACES` + Round-trip ×2 toggle) or **Custom (Odometer)** (optional From/To + Start/End odometer range, no flat km input). "Recent" route chips and **Repeat last trip** (via `tripDraft`) make repeat trips one tap. The panel keeps a fixed height so switching modes never shifts the layout.
+- `addTripLog` (FleetContext) validates vehicle authorization, advances `vehicle.odometerKm` (keeps **Ongoing Health** countdowns accurate), increments `totalTrips`, and writes an audit entry. Persisted in `localStorage` key `flt_trip_logs_react_v1`.
+- Active driver is `settings.currentDriver` (employee id, switched in the TopBar profile menu); on the backend this comes from the JWT.
 
 > Internal IDs (`drivers`, `bookings`, `auditing`, `DriverRoster`, `BookingsCalendar`, `RepairArchive`, `selectedDriver`) are legacy names kept for stability. **Only user-visible labels were renamed** (Drivers → Employees, Bookings → Calendar, Repair Ledger → Reports). Do not rename internal identifiers casually; if you do, update `Sidebar.jsx`, `TopBar.jsx` (`PAGE_META`), `App.jsx`, and `FleetContext.jsx` together.
 
@@ -98,7 +115,7 @@ COTELCO/
 
 ### Modal System & Mandatory Modern Interactive Pickers
 - Modals are all mounted once in `App.jsx`; each renders `null` unless `modalType` (from `FleetContext`) matches its key. Open with `setModalType('<key>')`, close with `setModalType(null)`. Target records are passed via `selectedVehicle`, `selectedDriver`, or `selectedBooking`.
-- Keys: `vehicle-detail`, `add-vehicle`, `vehicle-access`, `reassign`, `driver-detail`, `add-driver`, `employee-access`, `reassign-driver-vehicle`, `new-booking`, `booking-detail`, `new-wo`, `complete-wo`, `receipt-voucher`, `add-ledger` (files in `src/components/modals/`).
+- Keys: `vehicle-detail`, `add-vehicle`, `vehicle-access`, `reassign`, `driver-detail`, `add-driver`, `employee-access`, `reassign-driver-vehicle`, `new-booking`, `booking-detail`, `new-wo`, `complete-wo`, `receipt-voucher`, `add-ledger`, `log-trip` (files in `src/components/modals/`).
 - **Mandatory Modern Pickers (Never Use Outdated Native Dropdowns / Raw Date Pairs for Schedules & Personnel)**:
   - **Personnel / Assigned Specialist Selection**: ALWAYS use `PersonnelPickerField` (`src/components/common/PersonnelPickerModal.jsx`) — an avatar summary card with a `Change` button that opens the searchable **Department-Box Employee Directory Popup**. Never use a long native `<select>` dropdown for employees or mechanics.
   - **Schedule Duration / Date Range Selection**: ALWAYS use `DateRangeCalendarField` (`src/components/common/DateRangeCalendarModal.jsx`) — a duration summary card (`Start → Due · X days`) with a `Change` button that opens the interactive **Click-and-Drag Calendar Popup** (with green `TODAY` indicator and `START` / `DUE` range highlight). Never use raw paired Start/End `<input type="date">` boxes for scheduling.
@@ -125,6 +142,7 @@ Component ──(dispatch action)──► FleetContext (mutation + audit log) �
 | `vehicle.authorizedDriverIds[]` | `dbo.VehicleAccess` rows |
 | `bookings[]` | `dbo.Bookings` |
 | `workOrders[]`, `repairArchive[]` | `dbo.WorkOrders`, `dbo.RepairVouchers` |
+| `tripLogs[]` (DRIVER trip usage) | `dbo.TripLogs` (`COMMON_TRIP_ROUTES` → `dbo.TripRoutes`) |
 | `auditLogs[]` | `dbo.AuditLogs` |
 | `notifications[]` | `dbo.Notifications` |
 
@@ -325,6 +343,24 @@ When the company instructs the team to integrate with **Express.js + Microsoft S
 | `RecipientEmployeeId` | `VARCHAR(10)` | `FOREIGN KEY -> Employees(EmployeeId), NULL` | Specific mechanic/employee ID if targeted |
 | `CreatedAt` | `DATETIME2(0)` | `NOT NULL DEFAULT SYSUTCDATETIME()` | Timestamp created |
 
+#### 10. `dbo.TripLogs` (Driver Vehicle Usage & Mileage) + `dbo.TripRoutes` (Common Routes)
+*Full DDL in `docs/BACKEND_READINESS.md` §9. Inserting a trip also advances `dbo.Vehicles.OdometerKm` in the same transaction.*
+| Column | MS SQL Data Type | Constraints | Description |
+|---|---|---|---|
+| `TripId` | `VARCHAR(30)` | `PRIMARY KEY` | E.g. `TRIP-2026-483920` |
+| `VehicleId` | `VARCHAR(10)` | `FOREIGN KEY -> Vehicles(VehicleId)` | Vehicle used (driver must hold `VehicleAccess`) |
+| `EmployeeId` | `VARCHAR(10)` | `FOREIGN KEY -> Employees(EmployeeId)` | Driver who logged the trip |
+| `TripDate` | `DATE` | `NOT NULL` | Date of use |
+| `RouteId` | `VARCHAR(20)` | `FOREIGN KEY -> TripRoutes(RouteId), NULL` | Common route used (NULL for custom) |
+| `FromPlace` / `ToPlace` | `NVARCHAR(100)` | `NULL` | Route labels |
+| `IsRoundTrip` | `BIT` | `NOT NULL DEFAULT 0` | Route distance doubled when 1 |
+| `DistanceKm` | `DECIMAL(9, 1)` | `NOT NULL CHECK > 0` | Total km travelled |
+| `InputMode` | `VARCHAR(10)` | `NOT NULL` | `ROUTE`, `CUSTOM`, `ODOMETER` |
+| `OdometerStart` / `OdometerEnd` | `INT` | `NULL` | Present when `InputMode = 'ODOMETER'` |
+| `Purpose` | `NVARCHAR(100)` | `NOT NULL` | e.g. `Line / Feeder Inspection` |
+| `Notes` | `NVARCHAR(300)` | `NULL` | Optional driver note |
+| `CreatedAt` | `DATETIME2(0)` | `NOT NULL DEFAULT SYSUTCDATETIME()` | Timestamp logged |
+
 ---
 
 ## 3. UI/UX & Design Guidelines (Permanently Enforced)
@@ -380,6 +416,7 @@ When the company instructs the team to integrate with **Express.js + Microsoft S
 - **2-Role System (`DIRECTOR` vs. `MECHANIC`)**:
   - **Operations Director (`DIRECTOR`)**: Full access across all operational tabs (`dashboard`, `profiling`, `drivers`, `bookings`, `health`, `maintenance`, `auditing`, `archive`, `editables`). Cannot mark a maintenance work order as `Done` directly (clicking `Done` prompts to switch to the assigned mechanic).
   - **Assigned Mechanic (`MECHANIC`)**: Strictly scoped to their own **Dashboard** (4-panel all-at-once overview covering Maintenance Queue, Upcoming Schedules, Ongoing Vehicle Health, and Done & Recent Reports), **Car Profiling** (assigned vehicles only), **Calendar** (their schedules, with `+ Add Schedule` notifying the Director), **Ongoing Health** (read-only view of their assigned vehicles — no edit or send-to-maintenance actions), **Maintenance** (their assigned work orders, with Additional Work tracking and Next Service Interval on Done orders), **Reports** (their own current-month reports and assigned vehicles), and **My Profile** (`profile`, with `Edit Profile`, Driver's License tracking, and `My Archive` monthly folders). Only internal employees appear in assigned mechanic lists.
+  - **Authorized Driver (`DRIVER`)**: Strictly scoped to **Dashboard** (own trips/km, authorized-vehicle availability, license status, **Log a Trip** / **Repeat last trip**), **Car Profiling** (only vehicles they are authorized to drive, read-only), **Calendar** (read-only availability of their authorized vehicles + their own license expiry), **Reports** (their own trip logs), and **My Profile** (own details + license; may edit only own phone/email). No access to Employees, Ongoing Health, Maintenance, Archive, or Editables. Drivers never see other employees' data.
 
 ---
 
@@ -392,5 +429,5 @@ When the user explicitly instructs backend implementation:
 2. **Database Driver (`mssql`)**: Use the official Node.js **`mssql`** (TDS protocol) connection pool against **Microsoft SQL Server** with strictly parametrized queries (`@param`) and `BEGIN TRAN … COMMIT` transactions for multi-table workflows (work order completion, diagnostic resets, voucher generation, booking sync, editable rename cascades).
 3. **REST API Contract (`/api/v1`)**:
    - Auth & Bootstrap: `/api/v1/auth/login`, `/api/v1/auth/me`, `/api/v1/bootstrap`
-   - Core Resources: `/api/v1/vehicles` (+ `/access`, `/diagnostics`), `/api/v1/employees` (+ `/license`, `/profile/me`), `/api/v1/work-orders` (+ `/stage`, `/archive`, `/complete`), `/api/v1/reports` (+ `/attachments`), `/api/v1/bookings`, `/api/v1/branches`, `/api/v1/editables`, `/api/v1/incidents`, `/api/v1/audit-logs`, `/api/v1/notifications`, `/api/v1/archive`
+   - Core Resources: `/api/v1/vehicles` (+ `/access`, `/diagnostics`), `/api/v1/employees` (+ `/license`, `/profile/me`), `/api/v1/work-orders` (+ `/stage`, `/archive`, `/complete`), `/api/v1/reports` (+ `/attachments`), `/api/v1/bookings`, `/api/v1/trips` (+ `/api/v1/trip-routes`), `/api/v1/branches`, `/api/v1/editables`, `/api/v1/incidents`, `/api/v1/audit-logs`, `/api/v1/notifications`, `/api/v1/archive`
 4. **Frontend Seam (`src/services/api.js` + Vite Proxy)**: Add `src/services/api.js` and a Vite `/api` dev proxy. Swap `localStorage` initializers and mutations inside `FleetContext.jsx` to call the Express API while keeping the exported `useFleet()` contract identical — **zero component rewrites required**. Keep only browser UI preferences (`seniorMode`, `highContrast`, `sidebarCollapsed`) in `localStorage`.

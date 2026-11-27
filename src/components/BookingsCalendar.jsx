@@ -64,11 +64,20 @@ export const BookingsCalendar = () => {
     setSelectedBooking,
     setModalType,
     updateBooking,
-    updateVehicle
+    updateVehicle,
+    driverVehicles,
+    activeDriver,
+    setActiveTab
   } = useFleet();
 
   const isMechanic = settings?.currentRole === 'MECHANIC';
+  const isDriver = settings?.currentRole === 'DRIVER';
+  const canEditCalendar = !isDriver; // drivers get a read-only availability calendar
   const mechShort = (settings?.currentMechanic || '').split(' (')[0].trim().toLowerCase();
+  const driverVehicleCodes = useMemo(
+    () => new Set((driverVehicles || []).map(v => v.code)),
+    [driverVehicles]
+  );
 
   const [currentDate, setCurrentDate] = useState(INITIAL_DATE);
   const [selectedDateStr, setSelectedDateStr] = useState(getTodayStr);
@@ -361,6 +370,14 @@ export const BookingsCalendar = () => {
       if (expiryOnly && !isExpiryEvent(b)) {
         return false;
       }
+      if (isDriver) {
+        // Availability of MY authorized vehicles + MY license only (no notes, no other drivers' licenses)
+        if (b.complianceSubType === 'LICENSE_EXPIRY') {
+          if (b.driverId !== activeDriver?.id) return false;
+        } else if (!driverVehicleCodes.has(b.vehicleCode)) {
+          return false;
+        }
+      }
       if (isMechanic) {
         const createdByMech = b.createdByRole === 'MECHANIC' || (b.createdBy || '').split(' (')[0].trim().toLowerCase() === mechShort;
         if (!createdByMech) {
@@ -382,10 +399,19 @@ export const BookingsCalendar = () => {
       }
       return true;
     });
-  }, [allCalendarEvents, expiryOnly, vehicleFilter, typeFilter, branchFilter, isMechanic, mechShort, workOrders]);
+  }, [allCalendarEvents, expiryOnly, vehicleFilter, typeFilter, branchFilter, isMechanic, mechShort, workOrders, isDriver, driverVehicleCodes, activeDriver]);
 
   // Click on a booking or compliance record
   const handleBookingClick = (booking) => {
+    if (isDriver) {
+      if (booking.isComplianceRecord) {
+        setActiveTab(booking.complianceSubType === 'LICENSE_EXPIRY' ? 'profile' : 'profiling');
+        return;
+      }
+      setSelectedBooking(booking);
+      setModalType('booking-detail');
+      return;
+    }
     if (booking.isComplianceRecord) {
       if (booking.complianceSubType === 'LICENSE_EXPIRY' && booking.driverId) {
         const targetDriver = (drivers || []).find(d => d.id === booking.driverId);
@@ -618,12 +644,13 @@ export const BookingsCalendar = () => {
             <button
               type="button"
               className="btn btn-primary btn-sm no-print"
+              style={canEditCalendar ? undefined : { display: 'none' }}
               onClick={() => {
                 setSelectedBooking({
                   date: selectedDateStr,
                   mode: isMechanic ? 'schedule' : 'note'
                 });
-                setModalType('new-booking');
+                if (canEditCalendar) setModalType('new-booking');
               }}
             >
               <Plus size={14} /> {isMechanic ? 'Add Schedule' : 'Add Note'}
@@ -731,7 +758,7 @@ export const BookingsCalendar = () => {
                       >
                         <button
                           type="button"
-                          draggable={true}
+                          draggable={canEditCalendar}
                           onDragStart={(e) => {
                             e.stopPropagation();
                             e.dataTransfer.setData('text/plain', b.id);
@@ -825,7 +852,7 @@ export const BookingsCalendar = () => {
                             startTime: `${String(hour.val).padStart(2, '0')}:00`,
                             endTime: `${String(Math.min(18, hour.val + 2)).padStart(2, '0')}:00`
                           });
-                          setModalType('new-booking');
+                          if (canEditCalendar) setModalType('new-booking');
                         }}
                         onDragOver={(e) => {
                           e.preventDefault();
@@ -870,7 +897,7 @@ export const BookingsCalendar = () => {
                                 return (
                                   <div
                                     key={b.id}
-                                    draggable={true}
+                                    draggable={canEditCalendar}
                                     onDragStart={(e) => {
                                       e.stopPropagation();
                                       e.dataTransfer.setData('text/plain', b.id);
@@ -1104,7 +1131,7 @@ export const BookingsCalendar = () => {
                                   return (
                                     <div
                                       key={b.id}
-                                      draggable={true}
+                                      draggable={canEditCalendar}
                                       onDragStart={(e) => {
                                         e.stopPropagation();
                                         e.dataTransfer.setData('text/plain', b.id);
@@ -1203,7 +1230,7 @@ export const BookingsCalendar = () => {
                               return (
                                 <div
                                   key={`span-${wIdx}-${b.id}`}
-                                  draggable={true}
+                                  draggable={canEditCalendar}
                                   onDragStart={(e) => {
                                     e.stopPropagation();
                                     e.dataTransfer.setData('text/plain', b.id);
@@ -1458,7 +1485,7 @@ export const BookingsCalendar = () => {
                                 startTime: `${String(hour.val).padStart(2, '0')}:00`,
                                 endTime: `${String(Math.min(18, hour.val + 2)).padStart(2, '0')}:00`
                               });
-                              setModalType('new-booking');
+                              if (canEditCalendar) setModalType('new-booking');
                             }}
                             title={`Click to add schedule at ${hour.label}`}
                           >
@@ -1475,7 +1502,7 @@ export const BookingsCalendar = () => {
                             return (
                               <div
                                 key={b.id}
-                                draggable={true}
+                                draggable={canEditCalendar}
                                 onDragStart={(e) => {
                                   e.stopPropagation();
                                   e.dataTransfer.setData('text/plain', b.id);

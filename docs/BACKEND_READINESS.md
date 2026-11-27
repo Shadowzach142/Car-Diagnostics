@@ -82,7 +82,7 @@ These are things that work today only because everything runs in one browser. Ve
 
 ## 4. Roles & Permissions (server-enforced)
 
-Two roles only. Derived from the current `checkPermission` calls and the role scoping in the rulebook.
+Three roles: `DIRECTOR`, `MECHANIC`, `DRIVER`. Derived from the current `checkPermission` calls and the role scoping in the rulebook.
 
 | Capability | DIRECTOR | MECHANIC |
 |---|---|---|
@@ -110,11 +110,29 @@ Two roles only. Derived from the current `checkPermission` calls and the role sc
 
 Rule: **scope in SQL (`WHERE`), not by filtering in JS after the fact**, so a mechanic can never receive another mechanic's rows.
 
+### 4.1 `DRIVER` role (Authorized Driver)
+
+Identity: `Users.Role = 'DRIVER'` with a mandatory `EmployeeId` (same rule as `MECHANIC`). Everything is scoped through `dbo.VehicleAccess` for that employee.
+
+| Capability | DRIVER |
+|---|---|
+| Read vehicles | **only** vehicles with a `VehicleAccess` row for self (read-only; no diagnostics editing, no access management) |
+| Read employees | own record only (`GET /employees/me`); never the roster |
+| Edit own profile | **phone and email only** (`PUT /employees/me/contact`); license, department, title stay Director-managed |
+| Log a trip (`POST /trips`) | ✅ only for a vehicle they hold `VehicleAccess` to **and** whose `Status = 'ACTIVE'`; `EmployeeId` is taken from the JWT, never from the body |
+| Read trips | own rows only (`WHERE EmployeeId = @self`); Director reads all |
+| Delete trip | ❌ (Director only) |
+| Calendar: read | `Bookings` where `VehicleCode` ∈ authorized vehicles, plus compliance (insurance/LTO) for those vehicles, plus **own** license expiry; no calendar notes, no other drivers' licenses |
+| Calendar: add/edit/delete | ❌ read-only |
+| Reports | own **trip logs** only (repair/service reports are not exposed) |
+| Maintenance, Ongoing Health, Archive, Editables, Audit logs | ❌ |
+| Notifications | `DOCUMENT_EXPIRY` for own license / authorized vehicles, plus `RecipientRole = 'DRIVER'` targeted to them |
+
 ---
 
 ## 5. REST API Contract
 
-All paths under `/api/v1`. Auth required unless noted. `D` = Director, `M` = Mechanic (scoped per §4).
+All paths under `/api/v1`. Auth required unless noted. `D` = Director, `M` = Mechanic, `Dr` = Driver (scoped per §4 / §4.1).
 
 ### Auth
 | Method | Path | Roles | Notes |
@@ -152,9 +170,10 @@ All paths under `/api/v1`. Auth required unless noted. `D` = Director, `M` = Mec
 | Method | Path | Roles | Maps to |
 |---|---|---|---|
 | GET | `/employees` | D | state `drivers` |
-| GET | `/employees/me` | M | |
+| GET | `/employees/me` | M, Dr | |
 | POST | `/employees` | D | `addDriver` |
 | PUT | `/employees/:id` | D | `updateDriver` (license change appends `EmployeeLicenseHistory`, notifies) |
+| PUT | `/employees/me/contact` | Dr | `updateOwnDriverContact` `{ phone, email }` only |
 | PUT | `/employees/me` | M | `updateMechanicProfile` (name, specialty, phone, email, department, branch, category, employeeId, license no/type/issued/expiry) |
 
 ### Work orders (Maintenance Kanban)
@@ -185,6 +204,14 @@ All paths under `/api/v1`. Auth required unless noted. `D` = Director, `M` = Mec
 | DELETE | `/bookings/:id` | D, M(own) | notifies Director when `M` |
 | GET | `/calendar/expiry` | D | optional: insurance / LTO / license expiry events for `from..to` (otherwise computed client-side) |
 
+### Trips (Driver usage & mileage)
+| Method | Path | Roles | Notes |
+|---|---|---|---|
+| GET | `/trip-routes` | D, M, Dr | reference list for the Log Trip dropdown (`{ id, from, to, km }`); Director may later manage it |
+| GET | `/trips` | D, Dr(own) | query: `month=YYYY-MM`, `vehicleCode`, `employeeId` (D only), `q` |
+| POST | `/trips` | Dr, D | `addTripLog` `{ vehicleId, date, routeId?, from?, to?, roundTrip, distanceKm, inputMode, odometerStart?, odometerEnd?, purpose, notes }` — one SQL transaction (§6.10); `422` if not authorized / vehicle not `ACTIVE` / distance ≤ 0 |
+| DELETE | `/trips/:id` | D | `deleteTripLog`; does **not** roll the odometer back (adjust via vehicle edit) |
+
 ### Other
 | Method | Path | Roles | Notes |
 |---|---|---|---|
@@ -214,6 +241,7 @@ Today these live in `FleetContext`. Each is one `BEGIN TRAN … COMMIT` in a ser
 7. **Mechanic schedule changes.** On booking create/update/delete by a mechanic, compute the human-readable diff server-side (date, end date, time, status, title, assignee) and create a `SCHEDULE` notification for the Director.
 8. **Editable rename cascade.** `departments` → `Employees.Department`, `Vehicles.CustodianDepartment`; `jobTitles` → `Employees.JobTitle`; `employeeClassifications` → `Employees.Category`; `vehicleClassifications` → `Vehicles.Classification`; `serviceCategories` → `WorkOrders.Category`; `diagnosticTypes` → `VehicleDiagnostics.Type`. (`mechanics` needs no cascade — it is derived from `Employees`.)
 9. **Every mutation above writes `AuditLogs`** with the authenticated user, role, and `req.ip`.
+10. **Log trip (DRIVER).** In one transaction: verify `VehicleAccess(VehicleId, EmployeeId=self)` and `Vehicles.Status='ACTIVE'`; insert `TripLogs` (`TripId` from `seq_TripNo`); advance `Vehicles.OdometerKm` = `GREATEST(current, OdometerEnd)` when `InputMode='ODOMETER'`, else `current + DistanceKm` (use `UPDATE … SET OdometerKm = CASE …` — SQL Server has no `GREATEST`); `UPDATE Employees SET TotalTrips = TotalTrips + 1`; write `AuditLogs` (`Trip Logged`). Because the odometer moves, **Ongoing Health** countdowns/alerts update automatically (they are derived from `OdometerKm`).
 
 ---
 
@@ -252,6 +280,8 @@ Today these live in `FleetContext`. Each is one `BEGIN TRAN … COMMIT` in a ser
 | `booking.startTime` / `endTime` (`"08:00"`) | `StartTime` / `EndTime` (`TIME(0)`) | `startHour/endHour` derived |
 | `booking.driver` | `AssignedEmployeeId` → name, else `DriverNameText` | notes: `"Operations Note"` |
 | `booking.vehicleCode === 'NOTE'` | `VehicleCode IS NULL` | |
+| `trip.date` / `from` / `to` / `roundTrip` / `distanceKm` | `TripDate` / `FromPlace` / `ToPlace` / `IsRoundTrip` / `DistanceKm` | `inputMode` ⇔ `InputMode` (`ROUTE`/`CUSTOM`/`ODOMETER`); `driverId` ⇔ `EmployeeId`; `driverName`, `vehicleCode`, `plateNo` joined by the mapper |
+| `COMMON_TRIP_ROUTES[]` (`fleetData.js`) | `TripRoutes` | seeded from the constant; km are approximate one-way road distances |
 | `report.fileName/fileType/fileSize/fileDataUrl/receiptImage` | `Attachments` | `fileDataUrl` becomes a download URL |
 
 ---
@@ -267,6 +297,7 @@ CREATE SEQUENCE dbo.seq_VoucherNo   START WITH 10000 INCREMENT BY 1; -- VCH-<yea
 CREATE SEQUENCE dbo.seq_ReceiptNo   START WITH 100000 INCREMENT BY 1;-- RCPT-<n>
 CREATE SEQUENCE dbo.seq_BookingNo   START WITH 1 INCREMENT BY 1;     -- BK-<year>-<n>
 CREATE SEQUENCE dbo.seq_IncidentNo  START WITH 100 INCREMENT BY 1;   -- INC-<year>-<n>
+CREATE SEQUENCE dbo.seq_TripNo      START WITH 1 INCREMENT BY 1;     -- TRIP-<year>-<n>
 CREATE SEQUENCE dbo.seq_VehicleNo   START WITH 1 INCREMENT BY 1;     -- VEH-<nnn>
 CREATE SEQUENCE dbo.seq_EmployeeNo  START WITH 1 INCREMENT BY 1;     -- DRV-<nnn>
 GO
@@ -393,11 +424,11 @@ CREATE TABLE dbo.Users (
   UserId        INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Users PRIMARY KEY,
   Username      NVARCHAR(100) NOT NULL CONSTRAINT UQ_Users_Username UNIQUE,
   PasswordHash  VARCHAR(255)  NOT NULL,                       -- argon2id / bcrypt; never plaintext
-  Role          VARCHAR(20)   NOT NULL CONSTRAINT CK_Users_Role CHECK (Role IN ('DIRECTOR','MECHANIC')),
+  Role          VARCHAR(20)   NOT NULL CONSTRAINT CK_Users_Role CHECK (Role IN ('DIRECTOR','MECHANIC','DRIVER')),
   EmployeeId    VARCHAR(10)   NULL CONSTRAINT FK_Users_Employees REFERENCES dbo.Employees(EmployeeId),
   IsActive      BIT           NOT NULL CONSTRAINT DF_Users_Active DEFAULT 1,
   LastLoginAt   DATETIME2(0)  NULL,
-  CONSTRAINT CK_Users_MechanicHasEmployee CHECK (Role <> 'MECHANIC' OR EmployeeId IS NOT NULL)
+  CONSTRAINT CK_Users_MechanicHasEmployee CHECK (Role = 'DIRECTOR' OR EmployeeId IS NOT NULL)  -- MECHANIC and DRIVER must map to an employee
 );
 
 /* ---------- Vehicle access & histories ---------- */
@@ -537,6 +568,38 @@ CREATE TABLE dbo.Attachments (
 );
 CREATE INDEX IX_Att_Entity ON dbo.Attachments(EntityType, EntityId);
 
+/* ---------- Driver trips (DRIVER role: "I used the car") ---------- */
+CREATE TABLE dbo.TripRoutes (
+  RouteId       VARCHAR(20)   NOT NULL CONSTRAINT PK_TripRoutes PRIMARY KEY,   -- RT-KID-MAT
+  FromPlace     NVARCHAR(100) NOT NULL,
+  ToPlace       NVARCHAR(100) NOT NULL,
+  OneWayKm      DECIMAL(9,1)  NOT NULL CONSTRAINT CK_TripRoutes_Km CHECK (OneWayKm > 0),   -- approximate road distance
+  IsActive      BIT           NOT NULL CONSTRAINT DF_TripRoutes_Active DEFAULT 1,
+  SortOrder     INT           NOT NULL CONSTRAINT DF_TripRoutes_Sort DEFAULT 0
+);
+
+CREATE TABLE dbo.TripLogs (
+  TripId        VARCHAR(30)   NOT NULL CONSTRAINT PK_TripLogs PRIMARY KEY,     -- TRIP-2026-483920
+  VehicleId     VARCHAR(10)   NOT NULL CONSTRAINT FK_Trip_Vehicles  REFERENCES dbo.Vehicles(VehicleId),
+  EmployeeId    VARCHAR(10)   NOT NULL CONSTRAINT FK_Trip_Employees REFERENCES dbo.Employees(EmployeeId),
+  TripDate      DATE          NOT NULL,
+  RouteId       VARCHAR(20)   NULL CONSTRAINT FK_Trip_Routes REFERENCES dbo.TripRoutes(RouteId),  -- NULL == custom
+  FromPlace     NVARCHAR(100) NULL,
+  ToPlace       NVARCHAR(100) NULL,
+  IsRoundTrip   BIT           NOT NULL CONSTRAINT DF_Trip_Round DEFAULT 0,
+  DistanceKm    DECIMAL(9,1)  NOT NULL CONSTRAINT CK_Trip_Km CHECK (DistanceKm > 0),
+  InputMode     VARCHAR(10)   NOT NULL CONSTRAINT CK_Trip_Mode CHECK (InputMode IN ('ROUTE','CUSTOM','ODOMETER')),
+  OdometerStart INT           NULL,
+  OdometerEnd   INT           NULL,
+  Purpose       NVARCHAR(100) NOT NULL,
+  Notes         NVARCHAR(300) NULL,
+  CreatedAt     DATETIME2(0)  NOT NULL CONSTRAINT DF_Trip_At DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT CK_Trip_Odo CHECK (OdometerEnd IS NULL OR OdometerStart IS NULL OR OdometerEnd > OdometerStart)
+);
+CREATE INDEX IX_Trip_Employee_Date ON dbo.TripLogs(EmployeeId, TripDate DESC);
+CREATE INDEX IX_Trip_Vehicle_Date  ON dbo.TripLogs(VehicleId, TripDate DESC);
+/* Rule enforced in the service (not in DDL): the employee must hold dbo.VehicleAccess for VehicleId. */
+
 /* ---------- Calendar ---------- */
 CREATE TABLE dbo.Bookings (
   BookingId     VARCHAR(30)   NOT NULL CONSTRAINT PK_Bookings PRIMARY KEY,   -- BK-2026-001 (or BK-<WorkOrderId>)
@@ -656,6 +719,8 @@ Not modeled on purpose: per-user UI preferences (`seniorMode`, `highContrast`, `
 8. **Fabricated baseline history** (§2 #10): confirm it is removed and only real records are shown.
 9. **Existing data:** is there real data to migrate, or do we seed from `src/data/fleetData.js` defaults?
 10. **Deployment:** Express behind IIS / reverse proxy / Docker? HTTPS termination? Single site or separate API domain?
+11. **Driver trip logging:** keep `TripRoutes` as a fixed seed list or let the Director manage routes/km in **Editables**? Should a trip be allowed for a back-dated day (UI allows today and earlier), and should a **maximum correction window** apply? Should mechanics/directors see trip logs on a Director report page (not built yet)?
+12. **Driver login:** one `Users` row per driver (`Role='DRIVER'`, `EmployeeId` required) — confirm every driver gets an individual account (no shared motorpool login) so trips are attributable.
 
 ---
 

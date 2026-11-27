@@ -34,6 +34,9 @@ An enterprise utility fleet operations platform designed for **Cotabato Electric
    - Dedicated **Archive** tab for the Director (`Reports Archive`, `Maintenance History`, `Driver History`, `Paperwork History` grouped into monthly folders) and a **`My Archive`** tab inside the Mechanic's **My Profile**.
 8. **Configurable Editables (`EditablesConfig.jsx`)**
    - Centralized management for Departments, Job Titles, Employee/Vehicle Classifications, Service Categories & Tasks, Mechanics, Diagnostic Types, and Stations (`Branches`) with automatic rename cascading.
+9. **Authorized Driver Role (`DRIVER`)**
+   - 5-tab scoped view (Dashboard, Car Profiling, Calendar, Reports, My Profile) limited to the driver's **authorized vehicles** and own license.
+   - Fast **Log a Trip** flow: common-route dropdown (Kidapawan → Matalam, etc.) with round-trip toggle, custom km, or odometer range; purpose chips; one-tap **Repeat last trip**. Trips update the vehicle odometer so Ongoing Health stays accurate.
 
 ---
 

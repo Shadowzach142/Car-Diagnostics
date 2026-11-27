@@ -1208,3 +1208,107 @@ export const DEFAULT_BOOKINGS = [
     status: "Confirmed"
   }
 ];
+
+/* ===========================================================================
+   Driver Trip Logs (DRIVER role)
+   Common routes are APPROXIMATE one-way road distances in km. Drivers can always
+   override the distance (Custom km / Odometer range). Maps to dbo.TripRoutes
+   (reference data) and dbo.TripLogs (transactions) in docs/BACKEND_READINESS.md.
+   =========================================================================== */
+export const COMMON_TRIP_ROUTES = [
+  { id: 'RT-KID-LOCAL', from: 'Kidapawan', to: 'Within Kidapawan (local rounds)', km: 12 },
+  { id: 'RT-KID-MAT', from: 'Kidapawan', to: 'Matalam', km: 21 },
+  { id: 'RT-KID-MAK', from: 'Kidapawan', to: 'Makilala', km: 28 },
+  { id: 'RT-KID-ANT', from: 'Kidapawan', to: 'Antipas', km: 25 },
+  { id: 'RT-KID-MAG', from: 'Kidapawan', to: 'Magpet', km: 30 },
+  { id: 'RT-KID-MLA', from: 'Kidapawan', to: "M'lang", km: 36 },
+  { id: 'RT-KID-KAB', from: 'Kidapawan', to: 'Kabacan', km: 47 },
+  { id: 'RT-KID-MID', from: 'Kidapawan', to: 'Midsayap', km: 50 },
+  { id: 'RT-KID-CAR', from: 'Kidapawan', to: 'Carmen', km: 60 },
+  { id: 'RT-KID-COT', from: 'Kidapawan', to: 'Cotabato City', km: 90 },
+  { id: 'RT-KID-DVO', from: 'Kidapawan', to: 'Davao City', km: 120 }
+];
+
+export const TRIP_PURPOSES = [
+  'Line / Feeder Inspection',
+  'Field Service / Repair Crew',
+  'Meter Reading & Collection',
+  'Official Errand / Delivery',
+  'Meeting / Training',
+  'Hauling / Materials Pickup',
+  'Other'
+];
+
+const _isoDaysAgo = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+export const DEFAULT_TRIP_LOGS = [
+  {
+    id: 'TRIP-0001',
+    vehicleId: 'VEH-001',
+    vehicleCode: 'FLT-BT-01',
+    plateNo: 'NDI-4092',
+    driverId: 'DRV-001',
+    driverName: 'Danilo C. Santos',
+    date: _isoDaysAgo(1),
+    routeId: 'RT-KID-MAT',
+    from: 'Kidapawan',
+    to: 'Matalam',
+    roundTrip: true,
+    distanceKm: 42,
+    inputMode: 'ROUTE',
+    odometerStart: null,
+    odometerEnd: null,
+    purpose: 'Line / Feeder Inspection',
+    notes: '',
+    createdAt: new Date(Date.now() - 86400000).toISOString()
+  },
+  {
+    id: 'TRIP-0002',
+    vehicleId: 'VEH-001',
+    vehicleCode: 'FLT-BT-01',
+    plateNo: 'NDI-4092',
+    driverId: 'DRV-001',
+    driverName: 'Danilo C. Santos',
+    date: _isoDaysAgo(3),
+    routeId: 'RT-KID-MAK',
+    from: 'Kidapawan',
+    to: 'Makilala',
+    roundTrip: true,
+    distanceKm: 56,
+    inputMode: 'ROUTE',
+    odometerStart: null,
+    odometerEnd: null,
+    purpose: 'Field Service / Repair Crew',
+    notes: '',
+    createdAt: new Date(Date.now() - 3 * 86400000).toISOString()
+  }
+];
+
+/* Places for the Custom From / To dropdowns. kmFromHub = approximate road km from Kidapawan (HQ).
+   Pair distance: via Kidapawan (district roads radiate from HQ). Drivers can use "Odometer range" for exact figures. */
+export const TRIP_PLACES = [
+  { id: 'Kidapawan', kmFromHub: 0 },
+  { id: 'Antipas', kmFromHub: 25 },
+  { id: 'Matalam', kmFromHub: 21 },
+  { id: 'Makilala', kmFromHub: 28 },
+  { id: 'Magpet', kmFromHub: 30 },
+  { id: "M'lang", kmFromHub: 36 },
+  { id: 'Kabacan', kmFromHub: 47 },
+  { id: 'Midsayap', kmFromHub: 50 },
+  { id: 'Carmen', kmFromHub: 60 },
+  { id: 'Cotabato City', kmFromHub: 90 },
+  { id: 'Davao City', kmFromHub: 120 }
+];
+
+export const getTripDistance = (from, to) => {
+  const a = TRIP_PLACES.find(p => p.id === from);
+  const b = TRIP_PLACES.find(p => p.id === to);
+  if (!a || !b || a.id === b.id) return 0;
+  if (a.kmFromHub === 0) return b.kmFromHub;
+  if (b.kmFromHub === 0) return a.kmFromHub;
+  return a.kmFromHub + b.kmFromHub;
+};

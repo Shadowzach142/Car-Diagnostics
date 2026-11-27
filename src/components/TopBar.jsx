@@ -33,8 +33,18 @@ const PAGE_META = {
 
 const ROLES = [
   { id: 'DIRECTOR', label: 'Operations Director' },
-  { id: 'MECHANIC', label: 'Assigned Mechanic' }
+  { id: 'MECHANIC', label: 'Assigned Mechanic' },
+  { id: 'DRIVER', label: 'Authorized Driver' }
 ];
+
+// Driver-specific wording for shared tabs
+const DRIVER_PAGE_META = {
+  dashboard: { title: 'Dashboard', subtitle: 'Your vehicles, trips & license at a glance' },
+  profiling: { title: 'Car Profiling', subtitle: 'Vehicles you are authorized to drive' },
+  bookings: { title: 'Calendar', subtitle: 'Vehicle availability & your license expiry' },
+  auditing: { title: 'Reports', subtitle: 'Your trip logs & mileage' },
+  profile: { title: 'My Profile', subtitle: 'Driver details & license' }
+};
 
 const initials = (label) =>
   label.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -46,6 +56,8 @@ export const TopBar = () => {
     settings,
     setRole,
     setCurrentMechanic,
+    setCurrentDriver,
+    activeDriver,
     toggleSeniorMode,
     toggleHighContrast,
     resetToFactoryDefaults,
@@ -105,8 +117,9 @@ export const TopBar = () => {
     }
   }, [mobileSearchOpen]);
 
-  const meta = PAGE_META[activeTab] || PAGE_META.dashboard;
   const isMechanic = settings.currentRole === 'MECHANIC';
+  const isDriver = settings.currentRole === 'DRIVER';
+  const meta = (isDriver && DRIVER_PAGE_META[activeTab]) || PAGE_META[activeTab] || PAGE_META.dashboard;
   const mechanicsList = editables.mechanics || [];
   const activeMechanic = settings.currentMechanic || mechanicsList[0] || '';
   const activeMechShort = activeMechanic.split(' (')[0].trim();
@@ -125,6 +138,11 @@ export const TopBar = () => {
     } else if (notif.targetTab === 'maintenance' && notif.targetEntityId && setFocusedMaintenanceIds) {
       setFocusedMaintenanceIds([notif.targetEntityId]);
     } else if (notif.targetEntityType === 'DRIVER' && notif.targetEntityId) {
+      if (isDriver) {
+        // Drivers get their own profile, never the Director's employee modal
+        if (setActiveTab) setActiveTab('profile');
+        return;
+      }
       const targetDriver = drivers.find(d => d.id === notif.targetEntityId);
       if (targetDriver && setSelectedDriver && setModalType) {
         setSelectedDriver(targetDriver);
@@ -150,7 +168,11 @@ export const TopBar = () => {
   };
 
   const role = ROLES.find(r => r.id === settings.currentRole) || ROLES[0];
-  const displayName = isMechanic ? (activeMechShort || role.label) : role.label;
+  const displayName = isMechanic
+    ? (activeMechShort || role.label)
+    : isDriver
+    ? (activeDriver?.name || role.label)
+    : role.label;
 
   const submitSearch = (e) => {
     e.preventDefault();
@@ -382,7 +404,7 @@ export const TopBar = () => {
             <span className="profile-avatar-circle">{initials(displayName)}</span>
             <span className="profile-text-cluster">
               <span className="profile-user-name">{displayName}</span>
-              <span className="profile-user-role">{isMechanic ? 'Assigned Mechanic' : 'Active Role'}</span>
+              <span className="profile-user-role">{isMechanic ? 'Assigned Mechanic' : isDriver ? 'Authorized Driver' : 'Active Role'}</span>
             </span>
             <ChevronDown size={15} color="#9CA3AF" />
           </button>
@@ -398,7 +420,7 @@ export const TopBar = () => {
                     className={`role-select-item ${settings.currentRole === r.id ? 'active' : ''}`}
                     onClick={() => {
                       setRole(r.id);
-                      if (r.id !== 'MECHANIC') setProfileOpen(false);
+                      if (r.id === 'DIRECTOR') setProfileOpen(false);
                     }}
                   >
                     <span>{r.label}</span>
@@ -422,6 +444,26 @@ export const TopBar = () => {
                   >
                     {mechanicsList.map(m => (
                       <option key={m} value={m}>{m.split(' (')[0].trim()}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {isDriver && drivers.length > 0 && (
+                <div className="dropdown-section">
+                  <div className="dropdown-section-label">Active Driver</div>
+                  <select
+                    className="form-select"
+                    value={activeDriver?.id || ''}
+                    onChange={(e) => {
+                      setCurrentDriver(e.target.value);
+                      setProfileOpen(false);
+                    }}
+                    aria-label="Select active driver"
+                    style={{ fontSize: '0.8rem', minHeight: '34px' }}
+                  >
+                    {drivers.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
                     ))}
                   </select>
                 </div>

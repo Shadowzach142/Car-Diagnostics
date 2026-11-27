@@ -9,9 +9,11 @@ import {
   DEFAULT_BOOKINGS,
   DEFAULT_DRIVERS,
   WORK_ORDER_STAGES,
+  DEFAULT_TRIP_LOGS,
   buildDefaultVehicleDiagnostics,
   getVehicleImage,
-  getVehicleAuthorizedDrivers
+  getVehicleAuthorizedDrivers,
+  getEmployeeVehiclesWithAccess
 } from '../data/fleetData';
 
 const FleetContext = createContext(null);
@@ -27,6 +29,7 @@ const STORAGE_KEYS = {
   DRIVERS: 'flt_drivers_react_v4',
   SETTINGS: 'flt_settings_react_v4',
   INCIDENTS: 'flt_incidents_react_v1',
+  TRIPS: 'flt_trip_logs_react_v1',
   NOTIFICATIONS: 'flt_notifications_react_v1',
   NOTIFICATION_STATE: 'flt_notification_state_react_v1'
 };
@@ -237,28 +240,60 @@ export const FleetProvider = ({ children }) => {
     }
   });
 
+  const [tripLogs, setTripLogs] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.TRIPS);
+    if (!saved) return DEFAULT_TRIP_LOGS;
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : DEFAULT_TRIP_LOGS;
+    } catch {
+      return DEFAULT_TRIP_LOGS;
+    }
+  });
+
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     const parsed = saved ? JSON.parse(saved) : {};
-    const validRole = parsed.currentRole === 'MECHANIC' ? 'MECHANIC' : 'DIRECTOR';
+    const validRole = ['MECHANIC', 'DRIVER'].includes(parsed.currentRole) ? parsed.currentRole : 'DIRECTOR';
     return {
       seniorMode: false,
       highContrast: false,
       currentMechanic: DEFAULT_EDITABLES.mechanics[0],
+      currentDriver: DEFAULT_DRIVERS[0]?.id || '',
       ...parsed,
-      currentRole: validRole // 'DIRECTOR' or 'MECHANIC'
+      currentRole: validRole // 'DIRECTOR' | 'MECHANIC' | 'DRIVER'
     };
   });
 
   const [activeTab, setActiveTabState] = useState('dashboard');
   const MECHANIC_TABS = ['dashboard', 'profiling', 'bookings', 'health', 'maintenance', 'auditing', 'profile'];
+  const DRIVER_TABS = ['dashboard', 'profiling', 'bookings', 'auditing', 'profile'];
+  const allowedTabsForRole = (role) =>
+    role === 'MECHANIC' ? MECHANIC_TABS : role === 'DRIVER' ? DRIVER_TABS : null;
   const setActiveTab = (tab) => {
-    if (settings.currentRole === 'MECHANIC' && !MECHANIC_TABS.includes(tab)) {
+    const allowed = allowedTabsForRole(settings.currentRole);
+    if (allowed && !allowed.includes(tab)) {
       setActiveTabState('dashboard');
       return;
     }
     setActiveTabState(tab);
   };
+
+  // Driver role scoping (maps to dbo.VehicleAccess joins on the backend)
+  const isDriverRole = settings.currentRole === 'DRIVER';
+  const activeDriver = useMemo(
+    () => drivers.find(d => d.id === settings.currentDriver) || drivers[0] || null,
+    [drivers, settings.currentDriver]
+  );
+  const driverVehicles = useMemo(
+    () => (activeDriver ? getEmployeeVehiclesWithAccess(activeDriver, vehicles) : []),
+    [activeDriver, vehicles]
+  );
+  const driverTripLogs = useMemo(
+    () => (activeDriver ? tripLogs.filter(t => t.driverId === activeDriver.id) : []),
+    [activeDriver, tripLogs]
+  );
+  const [tripDraft, setTripDraft] = useState(null); // prefill for the Log Trip modal
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return localStorage.getItem('flt_sidebar_collapsed') === 'true';
   });
@@ -565,9 +600,22 @@ export const FleetProvider = ({ children }) => {
       });
     }
 
+    // Driver scope: only own license + documents of authorized vehicles
+    const driverVehicleIdSet = new Set(driverVehicles.map(v => v.id));
+
     const merged = [...storedNotifications, ...liveItems]
       .filter(item => !item.isDismissed && !dismissedSet.has(item.id))
       .filter(item => {
+        if (isDriverRole) {
+          if (item.recipientRole === 'DRIVER') {
+            return !item.recipientName || item.recipientName === activeDriver?.id;
+          }
+          if (item.type !== 'DOCUMENT_EXPIRY') return false;
+          if (item.targetEntityType === 'DRIVER') return item.targetEntityId === activeDriver?.id;
+          if (item.targetEntityType === 'VEHICLE') return driverVehicleIdSet.has(item.targetEntityId);
+          return false;
+        }
+        if (item.recipientRole === 'DRIVER') return false;
         if (!isMechanic) {
           return item.recipientRole !== 'MECHANIC';
         }
@@ -601,7 +649,7 @@ export const FleetProvider = ({ children }) => {
       if (sr !== 0) return sr;
       return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
     });
-  }, [vehicles, drivers, workOrders, storedNotifications, notificationState, settings.currentRole, settings.currentMechanic]);
+  }, [vehicles, drivers, workOrders, storedNotifications, notificationState, settings.currentRole, settings.currentMechanic, settings.currentDriver, driverVehicles, isDriverRole, activeDriver]);
 
   const unreadNotificationCount = useMemo(
     () => notifications.filter(n => !n.isRead).length,
@@ -633,6 +681,10 @@ export const FleetProvider = ({ children }) => {
   }, [incidentReports]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.TRIPS, JSON.stringify(tripLogs));
+  }, [tripLogs]);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
     document.documentElement.classList.toggle('senior-mode', settings.seniorMode);
     document.documentElement.classList.toggle('high-contrast', settings.highContrast);
@@ -648,18 +700,26 @@ export const FleetProvider = ({ children }) => {
   };
 
   const setRole = (newRole) => {
-    const normalizedRole = newRole === 'MECHANIC' ? 'MECHANIC' : 'DIRECTOR';
+    const normalizedRole = ['MECHANIC', 'DRIVER'].includes(newRole) ? newRole : 'DIRECTOR';
     setSettings(prev => ({
       ...prev,
       currentRole: normalizedRole,
-      currentMechanic: prev.currentMechanic || (editables.mechanics?.[0] || DEFAULT_EDITABLES.mechanics[0])
+      currentMechanic: prev.currentMechanic || (editables.mechanics?.[0] || DEFAULT_EDITABLES.mechanics[0]),
+      currentDriver: prev.currentDriver || drivers[0]?.id || ''
     }));
-    if (normalizedRole === 'MECHANIC' && !MECHANIC_TABS.includes(activeTab)) {
+    const allowed = allowedTabsForRole(normalizedRole);
+    if (allowed && !allowed.includes(activeTab)) {
       setActiveTabState('dashboard');
-    } else if (normalizedRole !== 'MECHANIC' && activeTab === 'profile') {
+    } else if (!allowed && activeTab === 'profile') {
       setActiveTabState('dashboard');
     }
     logAuditEvent('Role Switched', 'SECURITY_AUTH', `Session role changed to ${normalizedRole}`);
+  };
+
+  const setCurrentDriver = (driverId) => {
+    setSettings(prev => ({ ...prev, currentDriver: driverId }));
+    const d = drivers.find(x => x.id === driverId);
+    logAuditEvent('Active Driver Switched', 'SECURITY_AUTH', `Active driver view set to ${d?.name || driverId}`);
   };
 
   const setCurrentMechanic = (mechanicName) => {
@@ -770,9 +830,11 @@ export const FleetProvider = ({ children }) => {
 
   const logAuditEvent = (action, category, details, status = 'AUTHORIZED') => {
     const activeMechShort = (settings.currentMechanic || DEFAULT_EDITABLES.mechanics[0]).split(' (')[0].trim();
+    const activeDriverName = drivers.find(d => d.id === settings.currentDriver)?.name || 'Authorized Driver';
     const roleTitles = {
       DIRECTOR: 'Fleet Operations Director (Engr. R. Alcantara)',
-      MECHANIC: `Assigned Mechanic (${activeMechShort})`
+      MECHANIC: `Assigned Mechanic (${activeMechShort})`,
+      DRIVER: `Authorized Driver (${activeDriverName})`
     };
 
     const newLog = {
@@ -2137,6 +2199,97 @@ export const FleetProvider = ({ children }) => {
     return true;
   };
 
+  // Driver trip log (maps to dbo.TripLogs). Also advances the vehicle odometer so Ongoing Health stays accurate.
+  const addTripLog = (entry) => {
+    if (!checkPermission(['DRIVER', 'DIRECTOR'], 'Log Vehicle Trip')) return null;
+
+    const vehicle = vehicles.find(v => v.id === entry.vehicleId);
+    const driver = drivers.find(d => d.id === (entry.driverId || activeDriver?.id));
+    if (!vehicle || !driver) {
+      alert('Please choose a vehicle you are authorized to drive.');
+      return null;
+    }
+    if (settings.currentRole === 'DRIVER' && !(vehicle.authorizedDriverIds || []).includes(driver.id)) {
+      alert(`You are not authorized to drive ${vehicle.code}. Ask the Operations Director for vehicle access.`);
+      return null;
+    }
+
+    const distanceKm = Math.round(Number(entry.distanceKm) * 10) / 10;
+    if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
+      alert('Please enter the distance travelled (km) greater than zero.');
+      return null;
+    }
+
+    const prefix = `TRIP-${new Date().getFullYear()}-`;
+    const newTrip = {
+      id: `${prefix}${String(Date.now()).slice(-6)}${Math.floor(10 + Math.random() * 90)}`,
+      vehicleId: vehicle.id,
+      vehicleCode: vehicle.code,
+      plateNo: vehicle.plateNo,
+      driverId: driver.id,
+      driverName: driver.name,
+      date: entry.date || new Date().toISOString().substring(0, 10),
+      routeId: entry.routeId || null,
+      from: (entry.from || '').trim(),
+      to: (entry.to || '').trim(),
+      roundTrip: Boolean(entry.roundTrip),
+      distanceKm,
+      inputMode: entry.inputMode || 'ROUTE',
+      odometerStart: entry.odometerStart !== undefined && entry.odometerStart !== null && entry.odometerStart !== '' ? Number(entry.odometerStart) : null,
+      odometerEnd: entry.odometerEnd !== undefined && entry.odometerEnd !== null && entry.odometerEnd !== '' ? Number(entry.odometerEnd) : null,
+      purpose: entry.purpose || '',
+      notes: (entry.notes || '').trim(),
+      createdAt: new Date().toISOString()
+    };
+
+    setTripLogs(prev => [newTrip, ...prev]);
+
+    setVehicles(prev => prev.map(v => {
+      if (v.id !== vehicle.id) return v;
+      const current = Number(v.odometerKm) || 0;
+      const nextOdo = newTrip.inputMode === 'ODOMETER' && newTrip.odometerEnd
+        ? Math.max(current, newTrip.odometerEnd)
+        : current + distanceKm;
+      return { ...v, odometerKm: nextOdo };
+    }));
+
+    setDrivers(prev => prev.map(d => (
+      d.id === driver.id ? { ...d, totalTrips: (Number(d.totalTrips) || 0) + 1 } : d
+    )));
+
+    const routeLabel = newTrip.from || newTrip.to ? `${newTrip.from || '—'} → ${newTrip.to || '—'}` : 'Odometer range';
+    logAuditEvent(
+      'Trip Logged',
+      'CHAIN_OF_CUSTODY',
+      `${driver.name} used ${vehicle.code} (${routeLabel}${newTrip.roundTrip ? ', round trip' : ''}) — ${distanceKm} km${newTrip.notes ? ` (${newTrip.notes})` : ''}.`
+    );
+    return newTrip;
+  };
+
+  // Drivers may edit ONLY their own contact details (license / department stay Director-managed)
+  const updateOwnDriverContact = ({ phone, email }) => {
+    if (!checkPermission(['DRIVER'], 'Update Own Contact Details')) return false;
+    if (!activeDriver) return false;
+    const cleanPhone = String(phone || '').trim();
+    const cleanEmail = String(email || '').trim();
+    if (!cleanPhone) {
+      alert('Mobile number is required.');
+      return false;
+    }
+    setDrivers(prev => prev.map(d => (d.id === activeDriver.id ? { ...d, phone: cleanPhone, email: cleanEmail } : d)));
+    logAuditEvent('Driver Contact Updated', 'SECURITY_AUTH', `${activeDriver.name} updated contact details.`);
+    return true;
+  };
+
+  const deleteTripLog = (tripId) => {
+    if (!checkPermission(['DIRECTOR'], 'Delete Trip Log')) return false;
+    const target = tripLogs.find(t => t.id === tripId);
+    if (!target) return false;
+    setTripLogs(prev => prev.filter(t => t.id !== tripId));
+    logAuditEvent('Trip Log Removed', 'CHAIN_OF_CUSTODY', `Removed trip ${tripId} (${target.vehicleCode}, ${target.distanceKm} km).`);
+    return true;
+  };
+
   const resetToFactoryDefaults = () => {
     if (confirm('Restore Fleet Management System to official demonstration defaults?\n\nThis will reset all vehicles, branches, work orders, receipts, bookings, drivers, editables, and audit logs.')) {
       setEditables(DEFAULT_EDITABLES);
@@ -2147,13 +2300,15 @@ export const FleetProvider = ({ children }) => {
       setAuditLogs(DEFAULT_AUDIT_LOGS);
       setBookings(DEFAULT_BOOKINGS);
       setDrivers(DEFAULT_DRIVERS);
+      setTripLogs(DEFAULT_TRIP_LOGS);
       setStoredNotifications([]);
       setNotificationState({ readIds: [], dismissedIds: [] });
       setSettings({
         seniorMode: false,
         highContrast: false,
         currentRole: 'DIRECTOR',
-        currentMechanic: DEFAULT_EDITABLES.mechanics[0]
+        currentMechanic: DEFAULT_EDITABLES.mechanics[0],
+        currentDriver: DEFAULT_DRIVERS[0]?.id || ''
       });
       localStorage.clear();
       alert('System successfully restored to default demonstration data.');
@@ -2207,6 +2362,16 @@ export const FleetProvider = ({ children }) => {
       toggleHighContrast,
       setRole,
       setCurrentMechanic,
+      setCurrentDriver,
+      activeDriver,
+      driverVehicles,
+      driverTripLogs,
+      tripLogs,
+      tripDraft,
+      setTripDraft,
+      addTripLog,
+      updateOwnDriverContact,
+      deleteTripLog,
       updateMechanicProfile,
       checkPermission,
       reassignVehicle,

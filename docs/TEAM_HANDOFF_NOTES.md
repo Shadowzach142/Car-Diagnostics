@@ -21,9 +21,9 @@
 
 ---
 
-## 2. Role-Based Architecture (`DIRECTOR` vs. `MECHANIC`)
+## 2. Role-Based Architecture (`DIRECTOR`, `MECHANIC` & `DRIVER`)
 
-The system enforces a strict 2-role operational separation (currently switchable from the top-right profile menu for testing/demo; maps to JWT auth in `dbo.Users` on the backend):
+The system enforces a strict 3-role operational separation (currently switchable from the top-right profile menu for testing/demo; maps to JWT auth in `dbo.Users` on the backend):
 
 ### A. Operations Director / Operator (`DIRECTOR`)
 - **Dashboard (`Dashboard.jsx`):**
@@ -69,6 +69,20 @@ The system enforces a strict 2-role operational separation (currently switchable
   - **My Profile (`MechanicProfile.jsx`):**
     - Clean header with **`Edit Profile`** only (no cross-tab redirection clutter).
     - Includes the mechanic's **Driver's License** card + inline license editing, current-month `Recent Reports`, and a **`My Archive`** tab organizing the mechanic's historical reports and maintenance records by monthly folders.
+
+---
+
+### C. Authorized Driver (`DRIVER`) — new
+Switch to it from the top-right profile menu (**Authorized Driver**, then pick the active driver). Five tabs only:
+- **Dashboard (`DriverDashboard.jsx`):** greeting, **`Log a Trip`** and **`Repeat last trip`** buttons, KPI cards (trips this month, km this month, my vehicles available, license status — turns red when expired), `My vehicles` availability list, `Recent trips`, and `Upcoming on my vehicles`.
+- **Car Profiling (`DriverVehicles.jsx`):** read-only cards for **only the vehicles the Director authorized** — availability (`Available` / `Booked today` / `In maintenance` / `Offline`), odometer, Insurance & LTO validity pills, next schedules, `Log trip`.
+- **Calendar:** read-only availability of the driver's authorized vehicles plus the driver's **own** license expiry (no add/edit/delete/drag; booking details show only `Close`).
+- **Reports (`DriverTrips.jsx`):** the driver's own trip logs (this month / all history, CSV export).
+- **My Profile (`DriverProfile.jsx`):** own details, Driver's License card, vehicles I can drive. The driver can edit **only their own phone/email**; license renewals stay with the Director.
+
+**Low-effort trip logging (`LogTripModal.jsx`):** when opened from a vehicle's **Log trip** button, that vehicle is locked in a compact header strip (no re-selection). Distance is entered via **Common route** (separate **From** and **To** dropdowns from `TRIP_PLACES` — Kidapawan, Matalam, Makilala, Antipas, Magpet, M'lang, Kabacan, Midsayap, Carmen, Cotabato City, Davao City — with a **Round trip ×2 / One way** toggle) or **Custom (Odometer)** (optional From/To + **Odometer start / end** range, with start pre-filled from the vehicle's current odometer). Recent routes appear as one-tap chips. Saving advances the vehicle odometer, so **Ongoing Health** countdowns stay accurate.
+
+> Not built yet (open question in [BACKEND_READINESS.md §10](BACKEND_READINESS.md)): a Director-side page to review all drivers' trip logs.
 
 ---
 
