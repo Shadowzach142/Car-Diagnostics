@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useFleet } from '../context/FleetContext';
 import { getEmployeeVehiclesWithAccess } from '../data/fleetData';
 import {
@@ -13,8 +13,49 @@ import {
   Eye,
   Building2,
   ArrowLeft,
-  ChevronRight
+  ChevronRight,
+  CreditCard,
+  AlertTriangle
 } from 'lucide-react';
+
+const getLicenseValidity = (expiryStr) => {
+  if (!expiryStr) return { label: 'VALID', tone: 'valid', diffDays: 365 };
+  const exp = new Date(expiryStr);
+  if (isNaN(exp)) return { label: 'VALID', tone: 'valid', diffDays: 365 };
+  const now = new Date();
+  const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return { label: 'EXPIRED', tone: 'expired', diffDays };
+  if (diffDays <= 90) return { label: 'EXPIRING SOON', tone: 'expiring', diffDays };
+  return { label: 'VALID', tone: 'valid', diffDays };
+};
+
+const LicenseValidityBadge = ({ state }) => {
+  const styles =
+    state.tone === 'expired'
+      ? { bg: '#FEF2F2', border: '#FECACA', color: '#DC2626' }
+      : state.tone === 'expiring'
+      ? { bg: '#FFFBEB', border: '#FDE68A', color: '#B45309' }
+      : { bg: '#ECFDF5', border: '#A7F3D0', color: '#059669' };
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '0.14rem 0.45rem',
+        borderRadius: '5px',
+        fontSize: '0.64rem',
+        fontWeight: 800,
+        letterSpacing: '0.04em',
+        background: styles.bg,
+        border: `1px solid ${styles.border}`,
+        color: styles.color
+      }}
+    >
+      {state.label}
+    </span>
+  );
+};
 
 export const DriverRoster = () => {
   const {
@@ -25,7 +66,9 @@ export const DriverRoster = () => {
     globalSearch,
     setModalType,
     setSelectedDriver,
-    addEditableItem
+    addEditableItem,
+    focusedTabPulse,
+    setFocusedTabPulse
   } = useFleet();
 
   const departments = editables.departments || [
@@ -52,6 +95,16 @@ export const DriverRoster = () => {
   const [addingDepartment, setAddingDepartment] = useState(false);
   const [newDepartmentName, setNewDepartmentName] = useState('');
   const [deptError, setDeptError] = useState('');
+
+  useEffect(() => {
+    if (focusedTabPulse !== 'drivers') return;
+    setDepartmentFilter('ALL');
+    setViewMode('cards');
+    const clearTimer = setTimeout(() => {
+      setFocusedTabPulse(null);
+    }, 2400);
+    return () => clearTimeout(clearTimer);
+  }, [focusedTabPulse, setFocusedTabPulse]);
 
   // Filter logic
   const filteredDrivers = useMemo(() => {
@@ -238,15 +291,20 @@ export const DriverRoster = () => {
               gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
               gap: '1rem'
             }}>
-              {departmentGroups.map((group) => (
+              {departmentGroups.map((group) => {
+                const expiredInDept = group.members.filter(m => getLicenseValidity(m.licenseExpiry).tone === 'expired').length;
+                const expiringInDept = group.members.filter(m => getLicenseValidity(m.licenseExpiry).tone === 'expiring').length;
+                const alertCount = expiredInDept + expiringInDept;
+
+                return (
                 <button
                   key={group.name}
                   type="button"
-                  className="data-card"
+                  className={`data-card ${focusedTabPulse === 'drivers' ? 'health-focus-pulse' : ''}`}
                   onClick={() => setDepartmentFilter(group.name)}
                   style={{
                     background: 'var(--bg-surface)',
-                    border: '1px solid var(--border-light)',
+                    border: alertCount > 0 ? '1.5px solid #FCA5A5' : '1px solid var(--border-light)',
                     borderRadius: '14px',
                     padding: '1.2rem',
                     minHeight: '148px',
@@ -265,17 +323,34 @@ export const DriverRoster = () => {
                       width: '36px',
                       height: '36px',
                       borderRadius: '10px',
-                      background: 'var(--bg-surface-subtle)',
-                      border: '1px solid var(--border-light)',
+                      background: alertCount > 0 ? '#FEF2F2' : 'var(--bg-surface-subtle)',
+                      border: alertCount > 0 ? '1px solid #FECACA' : '1px solid var(--border-light)',
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: 'var(--text-secondary)',
+                      color: alertCount > 0 ? '#DC2626' : 'var(--text-secondary)',
                       flexShrink: 0
                     }}>
                       <Building2 size={17} />
                     </span>
-                    <ChevronRight size={17} color="var(--text-tertiary)" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      {alertCount > 0 && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          padding: '0.16rem 0.5rem',
+                          borderRadius: '999px',
+                          background: '#DC2626',
+                          color: '#FFFFFF',
+                          fontSize: '0.66rem',
+                          fontWeight: 800
+                        }}>
+                          <AlertTriangle size={11} /> {alertCount} License {alertCount === 1 ? 'Alert' : 'Alerts'}
+                        </span>
+                      )}
+                      <ChevronRight size={17} color="var(--text-tertiary)" />
+                    </div>
                   </div>
 
                   <div style={{ marginTop: '0.85rem' }}>
@@ -287,7 +362,8 @@ export const DriverRoster = () => {
                     </div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
 
               {/* Empty Box at the end: Add department */}
               <div
@@ -433,6 +509,8 @@ export const DriverRoster = () => {
                   {filteredDrivers.map(d => {
                     const clearedVehicles = getEmployeeVehiclesWithAccess(d, vehicles);
                     const branch = branches.find(b => b.id === d.branchId);
+                    const licState = getLicenseValidity(d.licenseExpiry);
+                    const hasLicenseAlert = licState.tone === 'expired' || licState.tone === 'expiring';
                     const initials = d.name
                       .replace(/^Engr\.\s+/i, '')
                       .split(' ')
@@ -448,7 +526,7 @@ export const DriverRoster = () => {
                         className="data-card"
                         style={{
                           background: 'var(--bg-surface)',
-                          border: '1px solid var(--border-light)',
+                          border: hasLicenseAlert ? '1.5px solid #FCA5A5' : '1px solid var(--border-light)',
                           borderRadius: '14px',
                           padding: '1.2rem',
                           display: 'flex',
@@ -642,6 +720,46 @@ export const DriverRoster = () => {
                                 </div>
                               </div>
                             </div>
+
+                            {/* Driver's License & Expiry Monitoring Box */}
+                            <div
+                              style={{
+                                marginTop: '0.2rem',
+                                padding: '0.58rem 0.72rem',
+                                borderRadius: '9px',
+                                background:
+                                  licState.tone === 'expired'
+                                    ? '#FEF2F2'
+                                    : licState.tone === 'expiring'
+                                    ? '#FFFBEB'
+                                    : 'var(--bg-surface-subtle)',
+                                border:
+                                  licState.tone === 'expired'
+                                    ? '1px solid #FECACA'
+                                    : licState.tone === 'expiring'
+                                    ? '1px solid #FDE68A'
+                                    : '1px solid var(--border-light)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.25rem'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.32rem', fontSize: '0.62rem', fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  <CreditCard size={12} /> DRIVER&apos;S LICENSE
+                                </span>
+                                <LicenseValidityBadge state={licState} />
+                              </div>
+                              <div className="mono" style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                                {d.licenseNo || 'L02-22-000000'}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', flexWrap: 'wrap', fontSize: '0.73rem', color: 'var(--text-secondary)' }}>
+                                <span>{d.licenseType || 'Professional (RC 1, 2)'}</span>
+                                <span className="mono" style={{ fontWeight: 700, color: licState.tone === 'expired' ? '#DC2626' : licState.tone === 'expiring' ? '#B45309' : 'var(--text-main)' }}>
+                                  Exp: {d.licenseExpiry || '2027-08-15'}
+                                </span>
+                              </div>
+                            </div>
                           </div>
                         </div>
 
@@ -701,6 +819,7 @@ export const DriverRoster = () => {
                 <tr>
                   <th>Employee</th>
                   <th>Role &amp; Classification</th>
+                  <th>Driver&apos;s License &amp; Expiry</th>
                   <th>Branch Station</th>
                   <th>Vehicles with Access</th>
                   <th>Contact Phone</th>
@@ -711,6 +830,7 @@ export const DriverRoster = () => {
                 {filteredDrivers.map(d => {
                   const clearedVehicles = getEmployeeVehiclesWithAccess(d, vehicles);
                   const branch = branches.find(b => b.id === d.branchId);
+                  const licState = getLicenseValidity(d.licenseExpiry);
                   const initials = d.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
                   return (
@@ -741,6 +861,17 @@ export const DriverRoster = () => {
                       <td>
                         <span className="cell-strong">{d.title || d.role}</span>
                         <span className="cell-sub">{d.department || 'Technical / Engineering'} &bull; {d.category}</span>
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                          <span className="mono" style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-main)' }}>
+                            {d.licenseNo || 'L02-22-000000'}
+                          </span>
+                          <LicenseValidityBadge state={licState} />
+                        </div>
+                        <span className="cell-sub mono">
+                          Exp: {d.licenseExpiry || '2027-08-15'} &bull; {d.licenseType || 'Professional'}
+                        </span>
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
                         {branch?.municipality || 'District Office'}

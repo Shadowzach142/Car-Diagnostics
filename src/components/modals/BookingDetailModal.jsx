@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useFleet } from '../../context/FleetContext';
 import { getVehicleImage } from '../../data/fleetData';
+import { PersonnelPickerField } from '../common/PersonnelPickerModal';
+import { DateRangeCalendarField } from '../common/DateRangeCalendarModal';
 import {
   X,
   CalendarDays,
-  Clock,
-  MapPin,
-  User,
   Wrench,
   Truck,
   Trash2,
-  FileText,
   CheckCircle2,
   Pencil,
   Save
@@ -22,18 +20,22 @@ export const BookingDetailModal = () => {
     setModalType,
     selectedBooking,
     setSelectedBooking,
-    vehicles,
+    vehicles = [],
+    drivers = [],
+    editables = {},
     deleteBooking,
-    updateBooking,
-    setSelectedVehicle
+    updateBooking
   } = useFleet();
 
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
+    vehicleCode: '',
+    type: 'MAINTENANCE',
     title: '',
     date: '',
-    startTime: '',
-    endTime: '',
+    deadline: '',
+    startTime: '08:00',
+    endTime: '11:00',
     driver: '',
     destination: '',
     purpose: '',
@@ -42,9 +44,16 @@ export const BookingDetailModal = () => {
 
   useEffect(() => {
     if (selectedBooking) {
+      const startDate = selectedBooking.date || new Date().toISOString().slice(0, 10);
+      const endDate = selectedBooking.deadline && selectedBooking.deadline >= startDate
+        ? selectedBooking.deadline
+        : startDate;
       setFormData({
+        vehicleCode: selectedBooking.vehicleCode || '',
+        type: selectedBooking.type === 'DISPATCH' ? 'DISPATCH' : 'MAINTENANCE',
         title: selectedBooking.title || '',
-        date: selectedBooking.date || '2026-10-19',
+        date: startDate,
+        deadline: endDate,
         startTime: selectedBooking.startTime || '08:00',
         endTime: selectedBooking.endTime || '11:00',
         driver: selectedBooking.driver || '',
@@ -58,14 +67,25 @@ export const BookingDetailModal = () => {
 
   if ((modalType !== 'booking-detail' && modalType !== 'edit-booking') || !selectedBooking) return null;
 
+  const isNote = selectedBooking.vehicleCode === 'NOTE' || selectedBooking.category === 'Calendar Note';
   const vehicle = vehicles.find(
-    v => v.id === selectedBooking.vehicleId || v.code === selectedBooking.vehicleCode
+    v => v.code === (isEditing ? formData.vehicleCode : selectedBooking.vehicleCode) || v.id === selectedBooking.vehicleId
   );
-  const photo = selectedBooking.avatar || getVehicleImage(vehicle);
-  const isMaint = selectedBooking.type === 'MAINTENANCE';
+  const photo = (!isNote && (vehicle ? getVehicleImage(vehicle) : selectedBooking.avatar)) || null;
+  const isMaint = (isEditing ? formData.type : selectedBooking.type) === 'MAINTENANCE';
+
+  // Personnel options combining mechanics and drivers
+  const personnelOptions = Array.from(
+    new Set([
+      ...(editables.mechanics || []),
+      ...drivers.map(d => d.name),
+      formData.driver
+    ].filter(Boolean))
+  );
 
   const handleDelete = () => {
-    if (confirm(`Remove this scheduled booking for ${selectedBooking.vehicleCode}?`)) {
+    const label = isNote ? selectedBooking.title : selectedBooking.vehicleCode;
+    if (confirm(`Remove this ${isNote ? 'calendar note' : 'scheduled booking'} for ${label}?`)) {
       deleteBooking(selectedBooking.id);
       setModalType(null);
     }
@@ -79,153 +99,267 @@ export const BookingDetailModal = () => {
 
   const handleSave = (e) => {
     e.preventDefault();
-    const [startH, startM] = (formData.startTime || '08:00').split(':').map(Number);
-    const [endH, endM] = (formData.endTime || '11:00').split(':').map(Number);
-    const startHour = (startH || 8) + (startM || 0) / 60;
-    const endHour = (endH || 11) + (endM || 0) / 60;
+    if (!formData.title.trim()) return;
 
-    const updates = {
-      ...formData,
-      startHour,
-      endHour
-    };
+    const finalDeadline = formData.deadline && formData.deadline >= formData.date
+      ? formData.deadline
+      : formData.date;
 
-    updateBooking(selectedBooking.id, updates);
-    setSelectedBooking(prev => ({ ...prev, ...updates }));
+    if (isNote) {
+      const updates = {
+        title: formData.title.trim(),
+        date: formData.date,
+        deadline: finalDeadline,
+        purpose: formData.purpose.trim() || formData.title.trim()
+      };
+      updateBooking(selectedBooking.id, updates);
+      setSelectedBooking(prev => ({ ...prev, ...updates }));
+    } else {
+      const [startH, startM] = (formData.startTime || '08:00').split(':').map(Number);
+      const [endH, endM] = (formData.endTime || '11:00').split(':').map(Number);
+      const startHour = (startH || 8) + (startM || 0) / 60;
+      const endHour = Math.max(startHour + 1, (endH || 11) + (endM || 0) / 60);
+      const matchedVeh = vehicles.find(v => v.code === formData.vehicleCode) || vehicle;
+
+      const updates = {
+        vehicleId: matchedVeh?.id || selectedBooking.vehicleId || '',
+        vehicleCode: matchedVeh?.code || formData.vehicleCode || selectedBooking.vehicleCode,
+        avatar: matchedVeh ? getVehicleImage(matchedVeh) : selectedBooking.avatar,
+        type: formData.type,
+        category: formData.type === 'MAINTENANCE' ? 'Vehicle Maintenance' : 'Vehicle Inspection / Test',
+        title: formData.title.trim(),
+        date: formData.date,
+        deadline: finalDeadline,
+        startTime: formData.startTime || '08:00',
+        endTime: formData.endTime || '11:00',
+        startHour,
+        endHour,
+        driver: formData.driver.trim() || selectedBooking.driver,
+        destination: formData.destination.trim() || selectedBooking.destination,
+        purpose: formData.purpose.trim(),
+        status: formData.status
+      };
+
+      updateBooking(selectedBooking.id, updates);
+      setSelectedBooking(prev => ({ ...prev, ...updates }));
+    }
+
     setIsEditing(false);
     if (modalType === 'edit-booking') {
       setModalType('booking-detail');
     }
   };
 
+  const viewEndDate = selectedBooking.deadline && selectedBooking.deadline > selectedBooking.date
+    ? selectedBooking.deadline
+    : null;
+
   return (
     <div className="modal-overlay" onClick={() => setModalType(null)}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+      <div
+        className="modal-box"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: isNote ? '480px' : '540px' }}
+      >
         <div className="modal-box-header">
           <div className="modal-box-title">
-            <CalendarDays size={20} color="var(--lime)" />
-            <span>{isEditing ? 'Edit Schedule Record' : 'Booking & Schedule Details'}</span>
+            <CalendarDays size={19} />
+            <span>
+              {isEditing
+                ? (isNote ? 'Edit Calendar Note' : 'Edit Vehicle Schedule')
+                : (isNote ? 'Calendar Note Details' : 'Vehicle Schedule Details')}
+            </span>
           </div>
           <button
             type="button"
             className="modal-box-close"
             onClick={() => setModalType(null)}
+            aria-label="Close modal"
           >
             <X size={18} />
           </button>
         </div>
 
         {isEditing ? (
-          <form onSubmit={handleSave}>
-            <div className="modal-box-body">
-              {/* Header vehicle identity summary */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1rem', padding: '0.6rem 0.8rem', background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
-                <img
-                  src={photo}
-                  alt={selectedBooking.vehicleCode}
-                  style={{ width: '44px', height: '34px', objectFit: 'cover', borderRadius: '4px' }}
+          <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <div className="modal-box-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', overflowY: 'auto' }}>
+              {!isNote && (
+                <>
+                  {/* Vehicle Summary / Selector */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.7rem',
+                    padding: '0.6rem 0.8rem',
+                    background: 'var(--bg-surface-subtle)',
+                    border: '1px solid var(--border-light)',
+                    borderRadius: '10px'
+                  }}>
+                    {photo && (
+                      <img
+                        src={photo}
+                        alt={formData.vehicleCode}
+                        style={{ width: '48px', height: '36px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }}
+                      />
+                    )}
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <select
+                        className="form-select"
+                        value={formData.vehicleCode}
+                        onChange={(e) => setFormData({ ...formData, vehicleCode: e.target.value })}
+                        style={{ minHeight: '34px', fontSize: '0.82rem', fontWeight: 700, padding: '0.25rem 0.55rem' }}
+                        aria-label="Select vehicle"
+                      >
+                        {vehicles.map(v => (
+                          <option key={v.id} value={v.code}>
+                            {v.code} &bull; {v.plateNo} ({v.makeModel})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Schedule Type & Status */}
+                  <div className="responsive-grid-2" style={{ gap: '0.75rem' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Schedule Type</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.4rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, type: 'MAINTENANCE' })}
+                          style={{
+                            padding: '0.45rem 0.5rem',
+                            borderRadius: '7px',
+                            border: formData.type === 'MAINTENANCE' ? '1.5px solid var(--text-main)' : '1px solid var(--border-light)',
+                            background: formData.type === 'MAINTENANCE' ? 'var(--bg-surface-subtle)' : 'var(--bg-surface)',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.3rem',
+                            color: 'var(--text-main)'
+                          }}
+                        >
+                          <Wrench size={13} /> Maintenance
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, type: 'DISPATCH' })}
+                          style={{
+                            padding: '0.45rem 0.5rem',
+                            borderRadius: '7px',
+                            border: formData.type === 'DISPATCH' ? '1.5px solid var(--text-main)' : '1px solid var(--border-light)',
+                            background: formData.type === 'DISPATCH' ? 'var(--bg-surface-subtle)' : 'var(--bg-surface)',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.3rem',
+                            color: 'var(--text-main)'
+                          }}
+                        >
+                          <Truck size={13} /> Inspection
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Status</label>
+                      <select
+                        className="form-select"
+                        value={formData.status}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                      >
+                        <option value="Scheduled">Scheduled</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Click-and-Drag Calendar Duration Picker */}
+              <DateRangeCalendarField
+                label={isNote ? 'Note Date Range' : 'Schedule Duration (Start → Due) *'}
+                startDate={formData.date}
+                endDate={formData.deadline}
+                personLabel={(formData.driver || '').split(' (')[0]}
+                onChange={(newStart, newEnd) =>
+                  setFormData(prev => ({ ...prev, date: newStart, deadline: newEnd }))
+                }
+              />
+
+              {!isNote && (
+                <div className="responsive-grid-2" style={{ gap: '0.75rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Start Time</label>
+                    <input
+                      type="time"
+                      className="form-input"
+                      value={formData.startTime}
+                      onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">End Time</label>
+                    <input
+                      type="time"
+                      className="form-input"
+                      value={formData.endTime}
+                      onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">{isNote ? 'Note Title *' : 'Schedule Title / Task *'}</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  required
                 />
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>{selectedBooking.vehicleCode} · {vehicle?.plateNo || 'Assigned'}</div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{vehicle?.makeModel || selectedBooking.category}</div>
-                </div>
-                <span className={`badge ${isMaint ? 'badge-warning' : 'badge-success'}`} style={{ marginLeft: 'auto' }}>
-                  {isMaint ? 'Maintenance' : 'Dispatch'}
-                </span>
               </div>
 
-              <div className="form-row" style={{ marginBottom: '0.85rem' }}>
-                <div className="form-col">
-                  <label className="form-label">Procedure / Trip Title *</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-col">
-                  <label className="form-label">Schedule Date *</label>
-                  <input
-                    type="date"
-                    className="form-input"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-row" style={{ marginBottom: '0.85rem' }}>
-                <div className="form-col">
-                  <label className="form-label">Start Time *</label>
-                  <input
-                    type="time"
-                    className="form-input"
-                    value={formData.startTime}
-                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-col">
-                  <label className="form-label">End Time *</label>
-                  <input
-                    type="time"
-                    className="form-input"
-                    value={formData.endTime}
-                    onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-row" style={{ marginBottom: '0.85rem' }}>
-                <div className="form-col">
-                  <label className="form-label">Assigned Driver / Custodian</label>
-                  <input
-                    type="text"
-                    className="form-input"
+              {!isNote && (
+                <>
+                  <PersonnelPickerField
+                    label="Assigned Personnel *"
                     value={formData.driver}
-                    onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
-                    placeholder="Enter driver or technician name"
+                    drivers={drivers}
+                    departments={editables.departments || []}
+                    onChange={(name) => setFormData(prev => ({ ...prev, driver: name }))}
                   />
-                </div>
-                <div className="form-col">
-                  <label className="form-label">Destination / Facility</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={formData.destination}
-                    onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
-                    placeholder="e.g. Kidapawan Central Motorpool"
-                  />
-                </div>
-              </div>
 
-              <div className="form-row" style={{ marginBottom: '0.85rem' }}>
-                <div className="form-col">
-                  <label className="form-label">Status</label>
-                  <select
-                    className="form-select"
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  >
-                    <option value="Scheduled">Scheduled</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                  </select>
-                </div>
-              </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Bay / Facility / Location</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={formData.destination}
+                      onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
+                      placeholder="e.g. COTELCO Central Motorpool"
+                    />
+                  </div>
+                </>
+              )}
 
-              <div style={{ marginBottom: '0.5rem' }}>
-                <label className="form-label">Operational Notes / Work Description</label>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">{isNote ? 'Note Details (Optional)' : 'Scope / Mechanic Notes (Optional)'}</label>
                 <textarea
                   className="form-input"
                   rows={3}
                   value={formData.purpose}
                   onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
-                  placeholder="Specific scope of dispatch or maintenance check"
+                  placeholder={isNote ? 'Write your note here...' : 'Describe maintenance work or schedule details...'}
+                  style={{ resize: 'vertical' }}
                 />
               </div>
             </div>
@@ -252,120 +386,116 @@ export const BookingDetailModal = () => {
         ) : (
           <>
             <div className="modal-box-body">
-              {/* Photo banner */}
-              <div style={{
-                position: 'relative',
-                borderRadius: 'var(--radius-sm)',
-                overflow: 'hidden',
-                height: '140px',
-                marginBottom: '1rem',
-                border: '1px solid var(--border-subtle)'
-              }}>
-                <img
-                  src={photo}
-                  alt={selectedBooking.vehicleCode}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-                <span
-                  className={`badge ${isMaint ? 'badge-warning' : 'badge-success'}`}
-                  style={{ position: 'absolute', top: 10, right: 10, boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }}
-                >
-                  {isMaint ? 'Maintenance' : 'Field Dispatch'}
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.9rem' }}>
-                <div>
-                  <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>{selectedBooking.title}</h3>
-                  <div style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>
-                    {selectedBooking.vehicleCode} {vehicle?.plateNo ? `· ${vehicle.plateNo}` : ''}
-                  </div>
+              {/* Photo banner for vehicle schedules */}
+              {!isNote && photo && (
+                <div style={{
+                  position: 'relative',
+                  borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
+                  height: '136px',
+                  marginBottom: '1rem',
+                  border: '1px solid var(--border-subtle)'
+                }}>
+                  <img
+                    src={photo}
+                    alt={selectedBooking.vehicleCode}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  <span
+                    className={`badge ${isMaint ? 'badge-warning' : 'badge-success'}`}
+                    style={{ position: 'absolute', top: 10, right: 10, boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }}
+                  >
+                    {isMaint ? 'Maintenance' : 'Inspection / Dispatch'}
+                  </span>
                 </div>
-                <span className={`badge ${selectedBooking.status === 'Completed' ? 'badge-neutral' : 'badge-primary'}`}>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.6rem', marginBottom: '0.9rem' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.12rem', fontWeight: 800, margin: 0 }}>{selectedBooking.title}</h3>
+                  {!isNote && (
+                    <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      {selectedBooking.vehicleCode} {vehicle?.plateNo ? `· ${vehicle.plateNo}` : ''}
+                      {vehicle?.makeModel ? ` · ${vehicle.makeModel}` : ''}
+                    </div>
+                  )}
+                </div>
+                <span className={`badge ${selectedBooking.status === 'Completed' ? 'badge-ok' : 'badge-muted'}`}>
                   {selectedBooking.status || 'Scheduled'}
                 </span>
               </div>
 
-              <div className="inspector-box" style={{ marginBottom: '1rem' }}>
-                <div className="cell-strong">{vehicle?.makeModel || selectedBooking.vehicleCode}</div>
-                <div className="card-sub">{vehicle?.classification || selectedBooking.category}</div>
-              </div>
-
-              <dl className="inspector-facts" style={{ marginBottom: '1.1rem' }}>
+              <dl className="inspector-facts" style={{ marginBottom: '1rem' }}>
                 <div>
-                  <dt>Date</dt>
-                  <dd><strong>{selectedBooking.date}</strong></dd>
+                  <dt>{viewEndDate ? 'Schedule Duration' : 'Date'}</dt>
+                  <dd className="mono">
+                    <strong>{viewEndDate ? `${selectedBooking.date} → ${viewEndDate}` : selectedBooking.date}</strong>
+                  </dd>
                 </div>
-                <div>
-                  <dt>Time Window</dt>
-                  <dd>{selectedBooking.startTime} - {selectedBooking.endTime}</dd>
-                </div>
-                <div>
-                  <dt>Assigned Driver</dt>
-                  <dd>{selectedBooking.driver}</dd>
-                </div>
-                <div>
-                  <dt>Branch / Area</dt>
-                  <dd>{selectedBooking.branch}</dd>
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <dt>Destination / Facility</dt>
-                  <dd>{selectedBooking.destination || selectedBooking.branch}</dd>
-                </div>
+                {!isNote && (
+                  <div>
+                    <dt>Time Window</dt>
+                    <dd className="mono">{selectedBooking.startTime || '08:00'} – {selectedBooking.endTime || '11:00'}</dd>
+                  </div>
+                )}
+                {!isNote && (
+                  <div>
+                    <dt>Assigned Personnel</dt>
+                    <dd>{(selectedBooking.driver || '').split(' (')[0] || 'Motorpool Staff'}</dd>
+                  </div>
+                )}
+                {!isNote && (
+                  <div>
+                    <dt>Bay / Facility</dt>
+                    <dd>{selectedBooking.destination || selectedBooking.branch || 'Central Motorpool'}</dd>
+                  </div>
+                )}
               </dl>
 
               {selectedBooking.purpose && (
                 <div style={{
                   background: 'var(--bg-surface-subtle)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '0.75rem 0.9rem',
-                  marginBottom: '1rem'
+                  border: '1px solid var(--border-light)',
+                  borderRadius: '8px',
+                  padding: '0.75rem 0.9rem'
                 }}>
-                  <div style={{ fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                    Operational Work Description
+                  <div style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>
+                    {isNote ? 'Note Details' : 'Scope / Notes'}
                   </div>
-                  <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+                  <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
                     {selectedBooking.purpose}
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="modal-box-footer" style={{ justifyContent: 'space-between' }}>
+            <div className="modal-box-footer" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
               <button
                 type="button"
                 className="btn btn-sm btn-outline"
-                style={{ color: 'var(--bad-text)', borderColor: 'var(--bad-bg)' }}
+                style={{ color: 'var(--bad-text)', borderColor: '#FECACA' }}
                 onClick={handleDelete}
               >
-                <Trash2 size={15} /> Cancel Booking
+                <Trash2 size={14} /> {isNote ? 'Delete Note' : 'Cancel Schedule'}
               </button>
 
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="btn btn-sm btn-outline"
                   onClick={() => setIsEditing(true)}
                 >
-                  <Pencil size={14} /> Edit Schedule
+                  <Pencil size={14} /> {isNote ? 'Edit Note' : 'Edit Schedule'}
                 </button>
-                {selectedBooking.status !== 'Completed' && (
+                {!isNote && selectedBooking.status !== 'Completed' && (
                   <button
                     type="button"
-                    className="btn btn-sm btn-success"
+                    className="btn btn-sm btn-primary"
                     onClick={handleMarkComplete}
                   >
-                    <CheckCircle2 size={15} /> Mark Completed
+                    <CheckCircle2 size={14} /> Mark Completed
                   </button>
                 )}
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
-                  onClick={() => setModalType(null)}
-                >
-                  Close
-                </button>
               </div>
             </div>
           </>

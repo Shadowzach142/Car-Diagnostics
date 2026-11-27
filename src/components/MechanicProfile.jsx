@@ -3,20 +3,45 @@ import { useFleet } from '../context/FleetContext';
 import { getVehicleImage, DEFAULT_EDITABLES } from '../data/fleetData';
 import {
   User,
-  Wrench,
-  CalendarDays,
   CheckCircle2,
   ClipboardList,
   Clock,
   Phone,
   Edit2,
-  Activity,
+  CreditCard,
+  FolderArchive,
+  ChevronRight,
+  ArrowLeft,
   FileText,
+  Wrench,
   X,
   Check
 } from 'lucide-react';
 
 const COMPLETED = 'Completed / Released';
+
+const getCurrentMonthKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const formatArchiveMonthLabel = (ym) => {
+  if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return 'Archived Files';
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, (m || 1) - 1, 1);
+  return `Month of ${d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+};
+
+const getLicenseValidity = (expiryStr) => {
+  if (!expiryStr) return { label: 'VALID', tone: 'valid', diffDays: 365 };
+  const exp = new Date(expiryStr);
+  if (isNaN(exp)) return { label: 'VALID', tone: 'valid', diffDays: 365 };
+  const now = new Date();
+  const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return { label: 'EXPIRED', tone: 'expired', diffDays };
+  if (diffDays <= 90) return { label: 'EXPIRING SOON', tone: 'expiring', diffDays };
+  return { label: 'VALID', tone: 'valid', diffDays };
+};
 
 export const MechanicProfile = () => {
   const {
@@ -53,9 +78,16 @@ export const MechanicProfile = () => {
   const mechBranch = branches.find(b => b.id === mechBranchId);
   const mechCategory = matchedDriver?.category || employeeClassifications[0] || 'Heavy Equipment';
   const mechEmployeeId = matchedDriver?.employeeId || 'COTELCO-MECH';
-  const mechLicenseNo = matchedDriver?.licenseNo || '';
+  const mechLicenseNo = matchedDriver?.licenseNo || 'L02-22-000000';
+  const mechLicenseType = matchedDriver?.licenseType || 'Professional (RC 1, 2, 3)';
+  const mechLicenseAcquiredDate = matchedDriver?.licenseAcquiredDate || '2022-08-15';
+  const mechLicenseExpiry = matchedDriver?.licenseExpiry || '2027-08-15';
+  const licenseState = getLicenseValidity(mechLicenseExpiry);
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileTab, setProfileTab] = useState('overview'); // 'overview' | 'archive'
+  const [selectedArchiveMonth, setSelectedArchiveMonth] = useState(null);
+  const currentMonthKey = useMemo(() => getCurrentMonthKey(), []);
   const [profileForm, setProfileForm] = useState({
     name: mechName,
     specialty: mechSpecialty,
@@ -65,7 +97,10 @@ export const MechanicProfile = () => {
     branchId: mechBranchId,
     category: mechCategory,
     employeeId: mechEmployeeId,
-    licenseNo: mechLicenseNo
+    licenseNo: mechLicenseNo,
+    licenseType: mechLicenseType,
+    licenseAcquiredDate: mechLicenseAcquiredDate,
+    licenseExpiry: mechLicenseExpiry
   });
 
   const initials = mechName
@@ -99,12 +134,50 @@ export const MechanicProfile = () => {
     return vehicles.filter(v => v.branchId === mechBranchId);
   }, [vehicles, myOrders, mechBranchId]);
 
-  const myRecentReports = useMemo(() => {
+  const myAllReports = useMemo(() => {
     return [...(repairArchive || [])]
       .filter(r => (r.mechanic || '').split(' (')[0].trim().toLowerCase() === mechNorm)
-      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
-      .slice(0, 5);
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   }, [repairArchive, mechNorm]);
+
+  const myRecentReports = useMemo(() => {
+    return myAllReports.filter(r => String(r.date || '').slice(0, 7) === currentMonthKey);
+  }, [myAllReports, currentMonthKey]);
+
+  const archiveMonthGroups = useMemo(() => {
+    const map = new Map();
+    const ensureGroup = (ym) => {
+      const key = /^\d{4}-\d{2}$/.test(ym) ? ym : 'unknown';
+      if (!map.has(key)) {
+        map.set(key, {
+          monthKey: key,
+          label: formatArchiveMonthLabel(key),
+          reports: [],
+          maintenance: []
+        });
+      }
+      return map.get(key);
+    };
+
+    myAllReports.forEach(r => {
+      const ym = String(r.date || '').slice(0, 7);
+      ensureGroup(ym).reports.push(r);
+    });
+
+    myOrders.forEach(wo => {
+      const ym = String(wo.dateCompleted || wo.dateReported || '').slice(0, 7);
+      ensureGroup(ym).maintenance.push(wo);
+    });
+
+    return Array.from(map.values())
+      .map(g => ({ ...g, totalCount: g.reports.length + g.maintenance.length }))
+      .sort((a, b) => String(b.monthKey).localeCompare(String(a.monthKey)));
+  }, [myAllReports, myOrders]);
+
+  const activeArchiveGroup = useMemo(
+    () => archiveMonthGroups.find(g => g.monthKey === selectedArchiveMonth) || null,
+    [archiveMonthGroups, selectedArchiveMonth]
+  );
 
   const openEditModal = () => {
     setProfileForm({
@@ -116,7 +189,10 @@ export const MechanicProfile = () => {
       branchId: mechBranchId,
       category: mechCategory,
       employeeId: mechEmployeeId,
-      licenseNo: mechLicenseNo
+      licenseNo: mechLicenseNo,
+      licenseType: mechLicenseType,
+      licenseAcquiredDate: mechLicenseAcquiredDate,
+      licenseExpiry: mechLicenseExpiry
     });
     setIsEditingProfile(true);
   };
@@ -133,7 +209,10 @@ export const MechanicProfile = () => {
       branchId: profileForm.branchId,
       category: profileForm.category,
       employeeId: profileForm.employeeId.trim(),
-      licenseNo: profileForm.licenseNo.trim()
+      licenseNo: profileForm.licenseNo.trim(),
+      licenseType: profileForm.licenseType.trim(),
+      licenseAcquiredDate: profileForm.licenseAcquiredDate,
+      licenseExpiry: profileForm.licenseExpiry
     });
     if (ok) setIsEditingProfile(false);
   };
@@ -203,45 +282,10 @@ export const MechanicProfile = () => {
             >
               <Edit2 size={14} /> Edit Profile
             </button>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={() => setActiveTab('profiling')}
-            >
-              <ClipboardList size={14} /> Car Profiling
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={() => setActiveTab('health')}
-            >
-              <Activity size={14} /> Ongoing Health
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={() => setActiveTab('bookings')}
-            >
-              <CalendarDays size={14} /> My Calendar
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={() => setActiveTab('auditing')}
-            >
-              <FileText size={14} /> Reports
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => setActiveTab('maintenance')}
-            >
-              <Wrench size={14} /> My Maintenance
-            </button>
           </div>
         </div>
 
-        {/* Neutral 2-Box Summary Grid */}
+        {/* 3-Box Summary Grid: Role & Clearance, Driver's License, Assigned Workload */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '0.75rem' }}>
           <div style={{
             background: 'var(--bg-surface-subtle)',
@@ -256,7 +300,67 @@ export const MechanicProfile = () => {
               Assigned Mechanic
             </span>
             <span style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
-              Scoped to Dashboard, Car Profiling, Calendar, Ongoing Health, Maintenance, Reports &amp; Profile
+              {mechDepartment} &bull; {mechCategory}
+            </span>
+          </div>
+
+          <div style={{
+            background:
+              licenseState.tone === 'expired'
+                ? '#FEF2F2'
+                : licenseState.tone === 'expiring'
+                ? '#FFFBEB'
+                : 'var(--bg-surface-subtle)',
+            border:
+              licenseState.tone === 'expired'
+                ? '1px solid #FCA5A5'
+                : licenseState.tone === 'expiring'
+                ? '1px solid #FDE68A'
+                : '1px solid var(--border-light)',
+            borderRadius: '6px',
+            padding: '0.75rem 0.9rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <CreditCard size={12} /> DRIVER&apos;S LICENSE
+              </span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '0.12rem 0.45rem',
+                  borderRadius: '5px',
+                  fontSize: '0.62rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.04em',
+                  background:
+                    licenseState.tone === 'expired'
+                      ? '#FEE2E2'
+                      : licenseState.tone === 'expiring'
+                      ? '#FEF3C7'
+                      : '#ECFDF5',
+                  border:
+                    licenseState.tone === 'expired'
+                      ? '1px solid #FECACA'
+                      : licenseState.tone === 'expiring'
+                      ? '1px solid #FDE68A'
+                      : '1px solid #A7F3D0',
+                  color:
+                    licenseState.tone === 'expired'
+                      ? '#DC2626'
+                      : licenseState.tone === 'expiring'
+                      ? '#B45309'
+                      : '#059669'
+                }}
+              >
+                {licenseState.label}
+              </span>
+            </div>
+            <span className="mono" style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-main)', display: 'block', marginTop: '3px' }}>
+              {mechLicenseNo}
+            </span>
+            <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', display: 'block' }}>
+              {mechLicenseType} &bull; <span className="mono" style={{ fontWeight: 700, color: licenseState.tone === 'expired' ? '#DC2626' : licenseState.tone === 'expiring' ? '#B45309' : 'var(--text-main)' }}>Exp: {mechLicenseExpiry}</span>
             </span>
           </div>
 
@@ -279,7 +383,71 @@ export const MechanicProfile = () => {
         </div>
       </div>
 
-      {/* Assigned Maintenance History */}
+      {/* 2-Tab Switcher: Overview & This Month vs My Archive */}
+      <div
+        role="tablist"
+        aria-label="Mechanic profile sections"
+        style={{
+          display: 'inline-grid',
+          gridTemplateColumns: 'repeat(2, auto)',
+          gap: '4px',
+          background: 'var(--bg-surface)',
+          padding: '4px',
+          borderRadius: '10px',
+          border: '1px solid var(--border-light)',
+          marginBottom: '1rem'
+        }}
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={profileTab === 'overview'}
+          onClick={() => {
+            setProfileTab('overview');
+            setSelectedArchiveMonth(null);
+          }}
+          style={{
+            height: '34px',
+            padding: '0 0.95rem',
+            borderRadius: '7px',
+            border: 'none',
+            background: profileTab === 'overview' ? '#1E293B' : 'transparent',
+            color: profileTab === 'overview' ? '#FFFFFF' : 'var(--text-secondary)',
+            fontWeight: 700,
+            fontSize: '0.8rem',
+            cursor: 'pointer'
+          }}
+        >
+          Overview &amp; This Month
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={profileTab === 'archive'}
+          onClick={() => setProfileTab('archive')}
+          style={{
+            height: '34px',
+            padding: '0 0.95rem',
+            borderRadius: '7px',
+            border: 'none',
+            background: profileTab === 'archive' ? '#1E293B' : 'transparent',
+            color: profileTab === 'archive' ? '#FFFFFF' : 'var(--text-secondary)',
+            fontWeight: 700,
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.4rem'
+          }}
+        >
+          <FolderArchive size={14} />
+          <span>My Archive ({archiveMonthGroups.length})</span>
+        </button>
+      </div>
+
+      {profileTab === 'overview' ? (
+        <>
+          {/* Assigned Maintenance History */}
       <section className="card dash-panel" aria-labelledby="mech-profile-orders">
         <div className="card-head">
           <div>
@@ -351,9 +519,6 @@ export const MechanicProfile = () => {
             <h3 className="card-title" id="mech-profile-health">Ongoing Health of My Cars</h3>
             <div className="card-sub">{myVehicles.length} assigned / station vehicles tracked</div>
           </div>
-          <button type="button" className="btn btn-outline btn-sm" onClick={() => setActiveTab('health')}>
-            <Activity size={14} /> Open Ongoing Health
-          </button>
         </div>
 
         <div className="alert-list">
@@ -408,22 +573,19 @@ export const MechanicProfile = () => {
         </div>
       </section>
 
-      {/* Recent Reports */}
+      {/* Recent Reports (Current Month Only) */}
       <section className="card dash-panel" aria-labelledby="mech-profile-reports">
         <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <div>
-            <h3 className="card-title" id="mech-profile-reports">Recent Reports</h3>
-            <div className="card-sub">Latest service &amp; filed reports for {mechName}&apos;s vehicles</div>
+            <h3 className="card-title" id="mech-profile-reports">Recent Reports &bull; {formatArchiveMonthLabel(currentMonthKey)}</h3>
+            <div className="card-sub">Service &amp; filed reports logged this month by {mechName}</div>
           </div>
-          <button type="button" className="btn btn-outline btn-sm" onClick={() => setActiveTab('auditing')}>
-            <FileText size={14} /> Open Reports
-          </button>
         </div>
 
         <div className="alert-list">
           {myRecentReports.length === 0 ? (
             <div className="empty-state">
-              <strong>No recent reports logged</strong>
+              <strong>No reports logged in {formatArchiveMonthLabel(currentMonthKey)}</strong>
             </div>
           ) : (
             myRecentReports.map((r, idx) => (
@@ -446,6 +608,169 @@ export const MechanicProfile = () => {
           )}
         </div>
       </section>
+        </>
+      ) : (
+        <section className="card dash-panel" aria-label="Mechanic monthly archive">
+          {!activeArchiveGroup ? (
+            <>
+              <div className="card-head">
+                <div>
+                  <h3 className="card-title">My Monthly Files Archive</h3>
+                  <div className="card-sub">All reports and maintenance history filed by {mechName}, categorized by month</div>
+                </div>
+              </div>
+
+              {archiveMonthGroups.length === 0 ? (
+                <div className="empty-state">
+                  <FolderArchive size={28} color="var(--text-tertiary)" />
+                  <strong>No archived files yet</strong>
+                </div>
+              ) : (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
+                  gap: '0.85rem',
+                  padding: '0.25rem 0'
+                }}>
+                  {archiveMonthGroups.map(group => (
+                    <button
+                      key={group.monthKey}
+                      type="button"
+                      onClick={() => setSelectedArchiveMonth(group.monthKey)}
+                      style={{
+                        textAlign: 'left',
+                        background: 'var(--bg-surface-subtle)',
+                        border: '1px solid var(--border-light)',
+                        borderRadius: '11px',
+                        padding: '0.95rem 1rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.55rem'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                          <FolderArchive size={17} color="var(--text-main)" />
+                          <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                            {group.label}
+                          </span>
+                        </div>
+                        <ChevronRight size={15} color="var(--text-tertiary)" />
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        <span className="badge badge-muted" style={{ fontSize: '0.68rem' }}>
+                          {group.reports.length} Report{group.reports.length === 1 ? '' : 's'}
+                        </span>
+                        <span className="badge badge-muted" style={{ fontSize: '0.68rem' }}>
+                          {group.maintenance.length} Maintenance
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.6rem',
+                paddingBottom: '0.75rem',
+                borderBottom: '1px solid var(--border-light)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline"
+                    onClick={() => setSelectedArchiveMonth(null)}
+                  >
+                    <ArrowLeft size={14} /> All Archive Months
+                  </button>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-main)' }}>
+                      {activeArchiveGroup.label}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                      {activeArchiveGroup.reports.length} Report{activeArchiveGroup.reports.length === 1 ? '' : 's'} &bull; {activeArchiveGroup.maintenance.length} Maintenance Record{activeArchiveGroup.maintenance.length === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Separate Section 1: My Reports */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                  <FileText size={13} /> MY FILED REPORTS ({activeArchiveGroup.reports.length})
+                </div>
+                {activeArchiveGroup.reports.length === 0 ? (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', padding: '0.4rem 0' }}>
+                    No reports filed in {activeArchiveGroup.label}.
+                  </div>
+                ) : (
+                  <div className="alert-list">
+                    {activeArchiveGroup.reports.map((r, idx) => (
+                      <div key={r.voucherNo || idx} className="alert-row" style={{ gap: '12px' }}>
+                        <div className="alert-main" style={{ flex: 1, minWidth: 0 }}>
+                          <div className="alert-top">
+                            <strong>{r.vehicleCode}</strong>
+                            <span className="muted">&bull; {r.plateNo}</span>
+                            <span className="badge badge-muted mono">{r.voucherNo}</span>
+                          </div>
+                          <div className="alert-sub">
+                            {r.serviceType} &bull; {r.date} &bull; {r.serviceSummary || r.facility}
+                          </div>
+                        </div>
+                        <span className="badge badge-ok" style={{ flexShrink: 0 }}>
+                          {r.fileName ? r.fileName : 'Report'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Separate Section 2: My Maintenance History */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                  <Wrench size={13} /> MY MAINTENANCE HISTORY ({activeArchiveGroup.maintenance.length})
+                </div>
+                {activeArchiveGroup.maintenance.length === 0 ? (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', padding: '0.4rem 0' }}>
+                    No maintenance work orders in {activeArchiveGroup.label}.
+                  </div>
+                ) : (
+                  <div className="alert-list">
+                    {activeArchiveGroup.maintenance.map(wo => {
+                      const isDone = wo.status === COMPLETED;
+                      return (
+                        <div key={wo.id} className="alert-row" style={{ gap: '12px' }}>
+                          <div className="alert-main" style={{ flex: 1, minWidth: 0 }}>
+                            <div className="alert-top">
+                              <strong>{wo.vehicleCode}</strong>
+                              <span className="muted">&bull; {wo.plateNo || '—'}</span>
+                              <span className="badge badge-muted mono">{wo.id}</span>
+                            </div>
+                            <div className="alert-sub">
+                              {wo.type} &bull; {wo.dateCompleted || wo.dateReported}
+                            </div>
+                          </div>
+                          <span className={`badge ${isDone ? 'badge-ok' : 'badge-warn'}`} style={{ flexShrink: 0 }}>
+                            {isDone ? 'Completed' : (wo.currentStage || 'In Progress')}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Edit Profile Modal */}
       {isEditingProfile && (
@@ -527,13 +852,44 @@ export const MechanicProfile = () => {
                 </div>
 
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Driver / Technician License No.</label>
+                  <label className="form-label">Driver&apos;s License No.</label>
                   <input
                     type="text"
                     className="form-input mono"
                     value={profileForm.licenseNo}
                     onChange={(e) => setProfileForm(prev => ({ ...prev, licenseNo: e.target.value }))}
-                    placeholder="e.g. LTO-12-883920"
+                    placeholder="e.g. L02-10-551204"
+                  />
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">License Type / DL Codes</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={profileForm.licenseType}
+                    onChange={(e) => setProfileForm(prev => ({ ...prev, licenseType: e.target.value }))}
+                    placeholder="e.g. Professional (RC 1, 2, 3)"
+                  />
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">License Issued / Renewed Date</label>
+                  <input
+                    type="date"
+                    className="form-input mono"
+                    value={profileForm.licenseAcquiredDate}
+                    onChange={(e) => setProfileForm(prev => ({ ...prev, licenseAcquiredDate: e.target.value }))}
+                  />
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">License Expiry Date</label>
+                  <input
+                    type="date"
+                    className="form-input mono"
+                    value={profileForm.licenseExpiry}
+                    onChange={(e) => setProfileForm(prev => ({ ...prev, licenseExpiry: e.target.value }))}
                   />
                 </div>
 

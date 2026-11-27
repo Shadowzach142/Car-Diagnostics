@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   DEFAULT_EDITABLES,
   DEFAULT_BRANCHES,
@@ -26,7 +26,9 @@ const STORAGE_KEYS = {
   BOOKINGS: 'flt_bookings_react_v4',
   DRIVERS: 'flt_drivers_react_v4',
   SETTINGS: 'flt_settings_react_v4',
-  INCIDENTS: 'flt_incidents_react_v1'
+  INCIDENTS: 'flt_incidents_react_v1',
+  NOTIFICATIONS: 'flt_notifications_react_v1',
+  NOTIFICATION_STATE: 'flt_notification_state_react_v1'
 };
 
 const DEFAULT_INCIDENTS = [
@@ -169,7 +171,7 @@ export const FleetProvider = ({ children }) => {
           ...w,
           archivedFromBoard,
           currentStage: w.currentStage || (w.status === 'Completed / Released' ? 'Completed / Released' : 'Active Repair / Servicing'),
-          assignedMechanic: w.assignedMechanic || 'Engr. Mateo R. Villanueva (Lead Fleet Diagnostic Specialist)'
+          assignedMechanic: w.assignedMechanic !== undefined ? w.assignedMechanic : 'Engr. Mateo R. Villanueva (Lead Fleet Diagnostic Specialist)'
         };
       });
     } catch {
@@ -201,11 +203,16 @@ export const FleetProvider = ({ children }) => {
         const def = DEFAULT_DRIVERS.find(x => x.id === d.id);
         const rawDept = d.department || def?.department || 'Technical / Engineering';
         const migratedDept = LEGACY_DEPARTMENT_MAP[rawDept] || rawDept;
+        const needsLicenseMigration = !d.licenseAcquiredDate;
         return {
           ...d,
           title: d.title || d.role || def?.title || 'Operator',
           role: d.title || d.role || def?.role || 'Operator',
-          department: migratedDept
+          department: migratedDept,
+          licenseNo: d.licenseNo && d.licenseNo !== 'N/A' ? d.licenseNo : (def?.licenseNo || `L02-22-${String(d.id || '100').replace(/\D/g, '').padStart(6, '4')}`),
+          licenseType: d.licenseType || def?.licenseType || 'Professional (RC 1, 2)',
+          licenseAcquiredDate: d.licenseAcquiredDate || def?.licenseAcquiredDate || '2022-08-15',
+          licenseExpiry: needsLicenseMigration && def?.licenseExpiry ? def.licenseExpiry : (d.licenseExpiry || def?.licenseExpiry || '2027-08-15')
         };
       });
       const existingIds = new Set(migrated.map(d => d.id));
@@ -258,6 +265,33 @@ export const FleetProvider = ({ children }) => {
   const [globalSearch, setGlobalSearch] = useState('');
   const [focusedHealthVehicleId, setFocusedHealthVehicleId] = useState(null);
   const [focusedProfileVehicleId, setFocusedProfileVehicleId] = useState(null);
+  const [focusedMaintenanceIds, setFocusedMaintenanceIds] = useState(null);
+  const [focusedTabPulse, setFocusedTabPulse] = useState(null);
+
+  const [storedNotifications, setStoredNotifications] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [notificationState, setNotificationState] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATION_STATE);
+    if (!saved) return { readIds: [], dismissedIds: [] };
+    try {
+      const parsed = JSON.parse(saved);
+      return {
+        readIds: Array.isArray(parsed?.readIds) ? parsed.readIds : [],
+        dismissedIds: Array.isArray(parsed?.dismissedIds) ? parsed.dismissedIds : []
+      };
+    } catch {
+      return { readIds: [], dismissedIds: [] };
+    }
+  });
 
   const toggleSidebar = () => {
     setSidebarCollapsed(prev => {
@@ -299,6 +333,292 @@ export const FleetProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
   }, [auditLogs]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(storedNotifications));
+  }, [storedNotifications]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATION_STATE, JSON.stringify(notificationState));
+  }, [notificationState]);
+
+  // Backend-ready Notification Engine (maps 1:1 to dbo.Notifications)
+  const pushNotification = ({
+    type = 'SYSTEM',
+    severity = 'INFO',
+    title = '',
+    message = '',
+    targetTab = 'dashboard',
+    targetEntityType = null,
+    targetEntityId = null,
+    recipientRole = 'ALL',
+    recipientName = null
+  }) => {
+    if (!title) return null;
+    const notif = {
+      id: `NOTIF-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      type,
+      severity,
+      title,
+      message,
+      targetTab,
+      targetEntityType,
+      targetEntityId,
+      recipientRole,
+      recipientName,
+      createdAt: new Date().toISOString(),
+      isRead: false,
+      isDismissed: false
+    };
+    setStoredNotifications(prev => [notif, ...prev].slice(0, 80));
+    return notif;
+  };
+
+  const markNotificationRead = (notifId) => {
+    if (!notifId) return;
+    setNotificationState(prev => (
+      prev.readIds.includes(notifId)
+        ? prev
+        : { ...prev, readIds: [...prev.readIds, notifId] }
+    ));
+    setStoredNotifications(prev => prev.map(n => (n.id === notifId ? { ...n, isRead: true } : n)));
+  };
+
+  const dismissNotification = (notifId) => {
+    if (!notifId) return;
+    setNotificationState(prev => ({
+      readIds: prev.readIds.includes(notifId) ? prev.readIds : [...prev.readIds, notifId],
+      dismissedIds: prev.dismissedIds.includes(notifId) ? prev.dismissedIds : [...prev.dismissedIds, notifId]
+    }));
+    setStoredNotifications(prev => prev.map(n => (n.id === notifId ? { ...n, isRead: true, isDismissed: true } : n)));
+  };
+
+  const notifications = useMemo(() => {
+    const now = new Date();
+    const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const isMechanic = settings.currentRole === 'MECHANIC';
+    const activeMechShort = (settings.currentMechanic || DEFAULT_EDITABLES.mechanics[0] || '').split(' (')[0].trim().toLowerCase();
+    const readSet = new Set(notificationState.readIds || []);
+    const dismissedSet = new Set(notificationState.dismissedIds || []);
+
+    const liveItems = [];
+
+    // 1. Live Document Expiry / Renewal notifications (Insurance & LTO Registration)
+    vehicles.forEach(v => {
+      const checkDoc = (expiryStr, docKey, docLabel) => {
+        if (!expiryStr) return;
+        const exp = new Date(expiryStr);
+        if (isNaN(exp)) return;
+        const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+        if (diffDays < 0) {
+          liveItems.push({
+            id: `NOTIF-DOC-${v.id}-${docKey}-${expiryStr}`,
+            type: 'DOCUMENT_EXPIRY',
+            severity: 'CRITICAL',
+            title: `${v.code} · ${docLabel} Expired`,
+            message: `Expired ${Math.abs(diffDays)}d ago (${expiryStr}). Update renewal in Car Profiling.`,
+            targetTab: 'profiling',
+            targetEntityType: 'VEHICLE',
+            targetEntityId: v.id,
+            recipientRole: 'DIRECTOR',
+            recipientName: null,
+            createdAt: `${expiryStr}T00:00:00.000Z`
+          });
+        } else if (diffDays <= 90) {
+          liveItems.push({
+            id: `NOTIF-DOC-${v.id}-${docKey}-${expiryStr}`,
+            type: 'DOCUMENT_EXPIRY',
+            severity: 'WARNING',
+            title: `${v.code} · ${docLabel} Expiring Soon`,
+            message: `Expires in ${diffDays}d (${expiryStr}). Schedule renewal in Car Profiling.`,
+            targetTab: 'profiling',
+            targetEntityType: 'VEHICLE',
+            targetEntityId: v.id,
+            recipientRole: 'DIRECTOR',
+            recipientName: null,
+            createdAt: `${expiryStr}T00:00:00.000Z`
+          });
+        }
+      };
+
+      checkDoc(v.insuranceExpiryDate, 'INS', 'Insurance');
+      checkDoc(v.registrationExpiryDate, 'REG', 'LTO Registration');
+
+      // 2. Live Ongoing Health diagnostic notifications
+      const diags = Array.isArray(v.diagnostics) ? v.diagnostics : [];
+      const currentOdo = Number(v.odometerKm) || 0;
+      diags.forEach(diag => {
+        const mode = diag.trackMode || 'BOTH';
+        const targetKm = Number(diag.targetKm) || 0;
+        const remainingKm = targetKm > 0 ? targetKm - currentOdo : null;
+        let remainingDays = null;
+        if (diag.targetDate) {
+          const parts = String(diag.targetDate).split('-').map(Number);
+          const targetLocal = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date(diag.targetDate);
+          if (!isNaN(targetLocal)) {
+            remainingDays = Math.ceil((targetLocal - todayLocal) / (1000 * 60 * 60 * 24));
+          }
+        }
+
+        const kmOverdue = (mode === 'KM' || mode === 'BOTH') && remainingKm !== null && remainingKm <= 0;
+        const kmSoon = (mode === 'KM' || mode === 'BOTH') && remainingKm !== null && remainingKm > 0 && remainingKm <= 1200;
+        const dateOverdue = (mode === 'DATE' || mode === 'BOTH') && remainingDays !== null && remainingDays < 0;
+        const dateSoon = (mode === 'DATE' || mode === 'BOTH') && remainingDays !== null && remainingDays >= 0 && remainingDays <= 21;
+
+        if (kmOverdue || dateOverdue || kmSoon || dateSoon) {
+          const isOverdue = kmOverdue || dateOverdue;
+          const partsMsg = [];
+          if (remainingKm !== null && (mode === 'KM' || mode === 'BOTH')) {
+            partsMsg.push(remainingKm <= 0 ? `Overdue by ${Math.abs(remainingKm).toLocaleString()} km` : `${remainingKm.toLocaleString()} km left`);
+          }
+          if (remainingDays !== null && (mode === 'DATE' || mode === 'BOTH')) {
+            partsMsg.push(remainingDays < 0 ? `${Math.abs(remainingDays)}d overdue` : `${remainingDays}d left`);
+          }
+          liveItems.push({
+            id: `NOTIF-HEALTH-${v.id}-${diag.id || diag.type || diag.label}-${isOverdue ? 'OVERDUE' : 'SOON'}`,
+            type: 'HEALTH_ALERT',
+            severity: isOverdue ? 'CRITICAL' : 'WARNING',
+            title: `${v.code} · ${diag.type || diag.label || 'Diagnostic'}`,
+            message: `${isOverdue ? 'Service overdue' : 'Service due soon'}: ${partsMsg.join(' · ')}.`,
+            targetTab: 'health',
+            targetEntityType: 'VEHICLE',
+            targetEntityId: v.id,
+            recipientRole: 'ALL',
+            recipientName: diag.assignedPerson || null,
+            createdAt: now.toISOString()
+          });
+        }
+      });
+    });
+
+    // 3. Live Active Maintenance Order notifications
+    workOrders
+      .filter(wo => wo.status !== 'Completed / Released')
+      .forEach(wo => {
+        const mechShort = (wo.assignedMechanic || '').split(' (')[0].trim();
+        liveItems.push({
+          id: `NOTIF-WO-${wo.id}-${wo.currentStage || 'OPEN'}`,
+          type: 'MAINTENANCE',
+          severity: wo.priority === 'EMERGENCY' || wo.priority === 'HIGH' ? 'CRITICAL' : 'INFO',
+          title: `${wo.vehicleCode} · ${wo.currentStage || 'In Maintenance'}`,
+          message: `${wo.type}${mechShort ? ` · Assigned to ${mechShort}` : ''}`,
+          targetTab: 'maintenance',
+          targetEntityType: 'WORK_ORDER',
+          targetEntityId: wo.id,
+          recipientRole: 'ALL',
+          recipientName: wo.assignedMechanic || null,
+          createdAt: wo.dateReported ? `${wo.dateReported}T08:00:00.000Z` : now.toISOString()
+        });
+      });
+
+    // 4. Live Employee Driver's License Expiry / Renewal notifications
+    drivers.forEach(d => {
+      if (!d.licenseExpiry) return;
+      const exp = new Date(d.licenseExpiry);
+      if (isNaN(exp)) return;
+      const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+      if (diffDays < 0) {
+        liveItems.push({
+          id: `NOTIF-LIC-${d.id}-${d.licenseExpiry}`,
+          type: 'DOCUMENT_EXPIRY',
+          severity: 'CRITICAL',
+          title: `${d.name} · Driver's License Expired`,
+          message: `License ${d.licenseNo || ''} expired ${Math.abs(diffDays)}d ago (${d.licenseExpiry}). Renew in Employees.`,
+          targetTab: 'drivers',
+          targetEntityType: 'DRIVER',
+          targetEntityId: d.id,
+          recipientRole: 'DIRECTOR',
+          recipientName: null,
+          createdAt: `${d.licenseExpiry}T00:00:00.000Z`
+        });
+      } else if (diffDays <= 90) {
+        liveItems.push({
+          id: `NOTIF-LIC-${d.id}-${d.licenseExpiry}`,
+          type: 'DOCUMENT_EXPIRY',
+          severity: 'WARNING',
+          title: `${d.name} · License Expiring Soon`,
+          message: `License ${d.licenseNo || ''} expires in ${diffDays}d (${d.licenseExpiry}). Schedule renewal in Employees.`,
+          targetTab: 'drivers',
+          targetEntityType: 'DRIVER',
+          targetEntityId: d.id,
+          recipientRole: 'DIRECTOR',
+          recipientName: null,
+          createdAt: `${d.licenseExpiry}T00:00:00.000Z`
+        });
+      }
+    });
+
+    // Vehicles assigned to current mechanic (for scoping)
+    const mechanicVehicleIds = new Set();
+    if (isMechanic) {
+      workOrders.forEach(wo => {
+        if ((wo.assignedMechanic || '').split(' (')[0].trim().toLowerCase() === activeMechShort) {
+          const v = vehicles.find(veh => veh.code === wo.vehicleCode);
+          if (v) mechanicVehicleIds.add(v.id);
+        }
+      });
+      vehicles.forEach(v => {
+        const hasAssignedDiag = (v.diagnostics || []).some(
+          d => (d.assignedPerson || '').split(' (')[0].trim().toLowerCase() === activeMechShort
+        );
+        if (hasAssignedDiag) mechanicVehicleIds.add(v.id);
+      });
+    }
+
+    const merged = [...storedNotifications, ...liveItems]
+      .filter(item => !item.isDismissed && !dismissedSet.has(item.id))
+      .filter(item => {
+        if (!isMechanic) {
+          return item.recipientRole !== 'MECHANIC';
+        }
+        const recipShort = (item.recipientName || '').split(' (')[0].trim().toLowerCase();
+        if (item.recipientRole === 'MECHANIC') {
+          return !recipShort || recipShort === activeMechShort;
+        }
+        if (item.recipientRole === 'ALL') {
+          if (recipShort && recipShort === activeMechShort) return true;
+          if (item.targetEntityType === 'VEHICLE' && mechanicVehicleIds.has(item.targetEntityId)) return true;
+        }
+        return false;
+      })
+      .map(item => ({
+        ...item,
+        isRead: Boolean(item.isRead || readSet.has(item.id))
+      }));
+
+    // Deduplicate by id
+    const seen = new Set();
+    const unique = merged.filter(item => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+
+    const sevRank = { CRITICAL: 0, WARNING: 1, INFO: 2 };
+    return unique.sort((a, b) => {
+      if (a.isRead !== b.isRead) return a.isRead ? 1 : -1;
+      const sr = (sevRank[a.severity] ?? 2) - (sevRank[b.severity] ?? 2);
+      if (sr !== 0) return sr;
+      return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+    });
+  }, [vehicles, drivers, workOrders, storedNotifications, notificationState, settings.currentRole, settings.currentMechanic]);
+
+  const unreadNotificationCount = useMemo(
+    () => notifications.filter(n => !n.isRead).length,
+    [notifications]
+  );
+
+  const markAllNotificationsRead = () => {
+    const visibleIds = notifications.map(n => n.id);
+    if (visibleIds.length === 0) return;
+    setNotificationState(prev => ({
+      ...prev,
+      readIds: Array.from(new Set([...(prev.readIds || []), ...visibleIds]))
+    }));
+    setStoredNotifications(prev =>
+      prev.map(n => (visibleIds.includes(n.id) ? { ...n, isRead: true } : n))
+    );
+  };
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(bookings));
@@ -356,7 +676,10 @@ export const FleetProvider = ({ children }) => {
     branchId,
     category,
     employeeId,
-    licenseNo
+    licenseNo,
+    licenseType,
+    licenseAcquiredDate,
+    licenseExpiry
   }) => {
     const cleanName = (name || '').trim();
     const cleanPhone = (phone || '').trim();
@@ -381,7 +704,10 @@ export const FleetProvider = ({ children }) => {
       ...(branchId ? { branchId } : {}),
       ...(category ? { category } : {}),
       ...(employeeId !== undefined && employeeId.trim() ? { employeeId: employeeId.trim() } : {}),
-      ...(licenseNo !== undefined ? { licenseNo: licenseNo.trim() } : {})
+      ...(licenseNo !== undefined ? { licenseNo: licenseNo.trim() } : {}),
+      ...(licenseType !== undefined ? { licenseType: licenseType.trim() } : {}),
+      ...(licenseAcquiredDate !== undefined ? { licenseAcquiredDate } : {}),
+      ...(licenseExpiry !== undefined ? { licenseExpiry } : {})
     });
 
     setDrivers(prev => prev.map(d => {
@@ -510,13 +836,28 @@ export const FleetProvider = ({ children }) => {
           done: initialStage === 'Completed / Released'
         }));
 
+    const isUnscheduled =
+      Boolean(woData.isUnscheduled) ||
+      !(woData.assignedMechanic || '').trim() ||
+      !(woData.scheduledDate || woData.targetCompletion);
+
+    const startDate = isUnscheduled
+      ? (woData.scheduledDate || '')
+      : (woData.scheduledDate || woData.dateReported || new Date().toISOString().substring(0, 10));
+    const deadlineDate = isUnscheduled
+      ? (woData.targetCompletion || '')
+      : (woData.targetCompletion || startDate);
+
     const newWO = {
       id: woId,
       ...woData,
+      assignedMechanic: isUnscheduled ? (woData.assignedMechanic || '') : (woData.assignedMechanic || ''),
       checklistItems,
       status: initialStage === 'Completed / Released' ? 'Completed / Released' : 'In Shop',
       currentStage: initialStage,
+      scheduledDate: startDate,
       dateReported: new Date().toISOString().substring(0, 10),
+      targetCompletion: deadlineDate,
       incurredCost: Number(woData.incurredCost) || 0,
       stages: []
     };
@@ -531,7 +872,7 @@ export const FleetProvider = ({ children }) => {
         return {
           ...v,
           status: initialStage === 'Completed / Released' ? 'ACTIVE' : 'IN-SHOP',
-          statusReason: `Maintenance (${initialStage}): ${woData.type} — Assigned: ${woData.assignedMechanic || 'Technician'}`,
+          statusReason: `Maintenance (${initialStage}): ${woData.type} — Assigned: ${newWO.assignedMechanic || 'Unassigned'}`,
           nextServiceDueKm: nextKm,
           nextServiceDueDate: nextDate
         };
@@ -539,36 +880,56 @@ export const FleetProvider = ({ children }) => {
       return v;
     }));
 
-    // Automatic Calendar Feed: Record maintenance booking on the calendar timeline
-    const targetVehicle = vehicles.find(v => v.code === woData.vehicleCode);
-    const targetBranch = branches.find(b => b.id === (targetVehicle?.branchId || 'BR-KID'));
-    const autoBooking = {
-      id: `BK-${woId}`,
-      vehicleId: targetVehicle?.id || 'VEH-001',
-      vehicleCode: woData.vehicleCode,
-      driver: woData.assignedMechanic || targetVehicle?.assignedDriver || 'Maintenance Specialist',
-      avatar: targetVehicle ? getVehicleImage(targetVehicle) : '',
-      type: 'MAINTENANCE',
-      title: woData.type || 'Maintenance Service',
-      category: woData.category || 'Preventive Maintenance (PMS)',
-      date: new Date().toISOString().substring(0, 10),
-      startHour: 8,
-      endHour: 11,
-      startTime: '08:00',
-      endTime: '11:00',
-      branchId: targetVehicle?.branchId || 'BR-KID',
-      branch: targetBranch?.municipality || 'Station Motorpool',
-      destination: woData.facility || 'COTELCO Motorpool & Diagnostic Bay',
-      purpose: woData.description || `Maintenance service (${woId})`,
-      status: 'Scheduled'
-    };
-    setBookings(prev => [autoBooking, ...prev]);
+    // Automatic Calendar Feed only when Scheduled (has both mechanic and schedule date)
+    if (!isUnscheduled && startDate && newWO.assignedMechanic) {
+      const targetVehicle = vehicles.find(v => v.code === woData.vehicleCode);
+      const targetBranch = branches.find(b => b.id === (targetVehicle?.branchId || 'BR-KID'));
+      const sameDay = !deadlineDate || deadlineDate === startDate;
+      const autoBooking = {
+        id: `BK-${woId}`,
+        vehicleId: targetVehicle?.id || 'VEH-001',
+        vehicleCode: woData.vehicleCode,
+        driver: newWO.assignedMechanic,
+        avatar: targetVehicle ? getVehicleImage(targetVehicle) : '',
+        type: 'MAINTENANCE',
+        title: sameDay
+          ? `${woData.type || 'Maintenance Service'} (Due ${deadlineDate})`
+          : `${woData.type || 'Maintenance Service'}`,
+        category: woData.category || 'Preventive Maintenance (PMS)',
+        date: startDate,
+        deadline: deadlineDate,
+        startHour: 8,
+        endHour: 11,
+        startTime: '08:00',
+        endTime: '11:00',
+        branchId: targetVehicle?.branchId || 'BR-KID',
+        branch: targetBranch?.municipality || 'Station Motorpool',
+        destination: woData.facility || 'COTELCO Motorpool & Diagnostic Bay',
+        purpose: `${woData.description ? `${woData.description} · ` : ''}Scheduled: ${startDate} · Deadline: ${deadlineDate} (${woId})`,
+        status: 'Scheduled'
+      };
+
+      setBookings(prev => [autoBooking, ...prev]);
+    }
 
     logAuditEvent(
       'Maintenance Scheduled',
       'MAINTENANCE',
-      `Scheduled ${woData.vehicleCode} for "${woData.type}" [Stage: ${initialStage}]. Assigned to: ${woData.assignedMechanic || 'Motorpool Specialist'}.`
+      `Scheduled ${woData.vehicleCode} for "${woData.type}" [Start: ${startDate}, Deadline: ${deadlineDate}, Stage: ${initialStage}]. Assigned to: ${woData.assignedMechanic || 'Motorpool Specialist'}.`
     );
+
+    pushNotification({
+      type: 'MAINTENANCE',
+      severity: woData.priority === 'EMERGENCY' || woData.priority === 'HIGH' ? 'CRITICAL' : 'INFO',
+      title: `${woData.vehicleCode} · Maintenance Scheduled`,
+      message: `${woData.type} (${startDate} → Due ${deadlineDate}) · ${(woData.assignedMechanic || 'Motorpool Specialist').split(' (')[0].trim()}.`,
+      targetTab: 'maintenance',
+      targetEntityType: 'WORK_ORDER',
+      targetEntityId: woId,
+      recipientRole: 'ALL',
+      recipientName: woData.assignedMechanic || null
+    });
+
     return newWO;
   };
 
@@ -594,16 +955,74 @@ export const FleetProvider = ({ children }) => {
       return w;
     }));
 
+    // Sync Calendar booking when a work order is scheduled or its schedule/mechanic changes
+    const nextMech = updates.assignedMechanic !== undefined ? updates.assignedMechanic : targetWO.assignedMechanic;
+    const nextStart = updates.scheduledDate !== undefined ? updates.scheduledDate : targetWO.scheduledDate;
+    const nextEnd = updates.targetCompletion !== undefined ? updates.targetCompletion : (targetWO.targetCompletion || nextStart);
+    if ((updates.scheduledDate || updates.targetCompletion || updates.assignedMechanic) && nextMech && nextStart) {
+      const targetVeh = vehicles.find(v => v.code === targetWO.vehicleCode);
+      const targetBranch = branches.find(b => b.id === (targetVeh?.branchId || targetWO.branchId || 'BR-KID'));
+      const bookingId = `BK-${woId}`;
+      setBookings(prev => {
+        const exists = prev.some(b => b.id === bookingId);
+        if (exists) {
+          return prev.map(b =>
+            b.id === bookingId
+              ? {
+                  ...b,
+                  driver: nextMech,
+                  date: nextStart,
+                  deadline: nextEnd || nextStart,
+                  status: isCompleted ? 'Completed' : b.status
+                }
+              : b
+          );
+        }
+        return [
+          {
+            id: bookingId,
+            vehicleId: targetVeh?.id || '',
+            vehicleCode: targetWO.vehicleCode,
+            driver: nextMech,
+            avatar: targetVeh ? getVehicleImage(targetVeh) : '',
+            type: 'MAINTENANCE',
+            title: targetWO.type || 'Maintenance Service',
+            category: targetWO.category || 'Preventive Maintenance (PMS)',
+            date: nextStart,
+            deadline: nextEnd || nextStart,
+            startHour: 8,
+            endHour: 11,
+            startTime: '08:00',
+            endTime: '11:00',
+            branchId: targetVeh?.branchId || targetWO.branchId || 'BR-KID',
+            branch: targetBranch?.municipality || 'Station Motorpool',
+            destination: targetWO.facility || 'COTELCO Motorpool & Diagnostic Bay',
+            purpose: `${targetWO.description ? `${targetWO.description} · ` : ''}Scheduled: ${nextStart} · Deadline: ${nextEnd || nextStart} (${woId})`,
+            status: isCompleted ? 'Completed' : 'Scheduled'
+          },
+          ...prev
+        ];
+      });
+    }
+
     setVehicles(prev => prev.map(v => {
       if (v.code === targetWO.vehicleCode) {
         if (isCompleted) {
           const woTypeLower = (targetWO.type || '').toLowerCase();
-          const checklistLower = (targetWO.checklist || []).map(item => item.toLowerCase());
+          const activeChecklistItems = updates.checklistItems || targetWO.checklistItems || [];
+          const extraItems = Array.isArray(updates.additionalWork)
+            ? updates.additionalWork
+            : (Array.isArray(targetWO.additionalWork) ? targetWO.additionalWork : []);
+          const allTaskTextsLower = [
+            woTypeLower,
+            ...(targetWO.checklist || []).map(item => String(item || '').toLowerCase()),
+            ...activeChecklistItems.map(item => String(item?.label || '').toLowerCase()),
+            ...extraItems.map(item => String(typeof item === 'string' ? item : item?.label || '').toLowerCase())
+          ].filter(Boolean);
+
           const updatedDiag = (v.diagnostics || buildDefaultVehicleDiagnostics(v)).map(d => {
             const dTypeLower = (d.type || '').toLowerCase();
-            const isChecklistMatch = checklistLower.includes(dTypeLower);
-            const isExactOrKeywordMatch =
-              isChecklistMatch ||
+            const isPrimaryMatch =
               dTypeLower === woTypeLower ||
               (woTypeLower.includes('oil') && dTypeLower.includes('oil')) ||
               (woTypeLower.includes('brake') && dTypeLower.includes('brake')) ||
@@ -611,10 +1030,20 @@ export const FleetProvider = ({ children }) => {
               (woTypeLower.includes('tire') && dTypeLower.includes('tire')) ||
               (woTypeLower.includes('battery') && dTypeLower.includes('battery'));
 
-            if (isExactOrKeywordMatch) {
-              const interval = Number(d.intervalKm) || 5000;
-              let nextTargetDate = d.targetDate;
-              if (d.intervalMonths && d.intervalMonths !== 'CUSTOM') {
+            const isAnyTaskMatch = allTaskTextsLower.some(t =>
+              t === dTypeLower ||
+              (t.includes('oil') && dTypeLower.includes('oil')) ||
+              (t.includes('brake') && dTypeLower.includes('brake')) ||
+              (t.includes('dielectric') && dTypeLower.includes('dielectric')) ||
+              (t.includes('tire') && dTypeLower.includes('tire')) ||
+              (t.includes('battery') && dTypeLower.includes('battery'))
+            );
+
+            if (isPrimaryMatch || isAnyTaskMatch) {
+              const overrideKm = isPrimaryMatch ? Number(updates.intervalKmOverride) : 0;
+              const interval = overrideKm > 0 ? overrideKm : (Number(d.intervalKm) || 5000);
+              let nextTargetDate = (isPrimaryMatch && updates.targetDateOverride) ? updates.targetDateOverride : d.targetDate;
+              if ((!isPrimaryMatch || !updates.targetDateOverride) && d.intervalMonths && d.intervalMonths !== 'CUSTOM') {
                 const [y, m, day] = today.split('-').map(Number);
                 const targetMonthDate = new Date(y, (m - 1) + Number(d.intervalMonths), 1);
                 const maxDay = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth() + 1, 0).getDate();
@@ -623,22 +1052,27 @@ export const FleetProvider = ({ children }) => {
               }
               return {
                 ...d,
+                intervalKm: interval,
                 lastDoneKm: v.odometerKm || d.lastDoneKm,
                 targetKm: (v.odometerKm || 0) + interval,
                 lastDoneDate: today,
                 targetDate: nextTargetDate,
+                notes: isPrimaryMatch ? (updates.mechanicNote || updates.description || d.notes) : `Updated via additional mechanic work (${today})`,
                 assignedPerson: updates.assignedMechanic || targetWO.assignedMechanic || d.assignedPerson
               };
             }
             return d;
           });
+          const overrideKmNum = Number(updates.intervalKmOverride);
           return {
             ...v,
             status: 'ACTIVE',
             statusReason: 'Cleared maintenance & diagnostics. Returned to active service.',
             lastServiceDate: today,
-            nextServiceDueKm: Number(updates.targetKm) || Number(targetWO.targetKm) || ((v.odometerKm || 20000) + 5000),
-            nextServiceDueDate: updates.nextServiceDate || targetWO.nextServiceDate || v.nextServiceDueDate,
+            nextServiceDueKm: overrideKmNum > 0
+              ? ((v.odometerKm || 0) + overrideKmNum)
+              : (Number(updates.targetKm) || Number(targetWO.targetKm) || ((v.odometerKm || 20000) + 5000)),
+            nextServiceDueDate: updates.targetDateOverride || updates.nextServiceDate || targetWO.nextServiceDate || v.nextServiceDueDate,
             urgentAlert: null,
             diagnostics: updatedDiag
           };
@@ -651,6 +1085,93 @@ export const FleetProvider = ({ children }) => {
       }
       return v;
     }));
+
+    if (isCompleted && (updates.createReport || updates.mechanicNote)) {
+      const targetVeh = vehicles.find(v => v.code === targetWO.vehicleCode);
+      const nextKmVal = Number(updates.intervalKmOverride);
+      const extraWorkList = (
+        Array.isArray(updates.additionalWork)
+          ? updates.additionalWork
+          : (Array.isArray(targetWO.additionalWork) ? targetWO.additionalWork : [])
+      )
+        .map(item => (typeof item === 'string' ? item : item?.label || '').trim())
+        .filter(Boolean);
+      const extraChecklistLabels = (updates.checklistItems || targetWO.checklistItems || [])
+        .filter(i => i.addedByMechanic)
+        .map(i => i.label)
+        .filter(Boolean);
+      const combinedExtras = Array.from(new Set([...extraWorkList, ...extraChecklistLabels]));
+      const extraDetails = combinedExtras.length > 0
+        ? `Additional work / parts replaced: ${combinedExtras.join(', ')}`
+        : null;
+      const intervalDetails = [
+        nextKmVal > 0 ? `Next interval: +${nextKmVal.toLocaleString()} km` : null,
+        updates.targetDateOverride ? `Next due date: ${updates.targetDateOverride}` : null
+      ].filter(Boolean).join(' · ');
+      const noteText = (updates.mechanicNote || updates.description || '').trim();
+      const fullSummary = [noteText, extraDetails, intervalDetails].filter(Boolean).join('\n') || 'Completed assigned maintenance checklist.';
+      const allPartsReplaced = Array.from(new Set([
+        ...(updates.checklistItems || targetWO.checklistItems || []).map(i => i.label),
+        ...combinedExtras
+      ])).filter(Boolean).join(', ') || targetWO.type;
+
+      setRepairArchive(prev => {
+        const existingIdx = prev.findIndex(r => r.woNo === woId);
+        if (existingIdx >= 0) {
+          return prev.map((r, i) => (
+            i === existingIdx
+              ? {
+                  ...r,
+                  date: today,
+                  mechanic: updates.assignedMechanic || targetWO.assignedMechanic || r.mechanic,
+                  serviceSummary: fullSummary,
+                  partsReplaced: allPartsReplaced
+                }
+              : r
+          ));
+        }
+        const voucherNo = `VCH-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+        const receiptId = `RCPT-${Math.floor(100000 + Math.random() * 900000)}`;
+        return [
+          {
+            id: voucherNo,
+            voucherNo,
+            receiptId,
+            woNo: woId,
+            date: today,
+            vehicleCode: targetWO.vehicleCode,
+            plateNo: targetWO.plateNo || targetVeh?.plateNo || 'N/A',
+            model: targetVeh?.makeModel || targetWO.classification || 'Utility Vehicle',
+            branchId: targetWO.branchId || targetVeh?.branchId || 'BR-KID',
+            repairScope: 'IN_HOUSE',
+            facility: targetWO.facility || 'In-House Motorpool',
+            mechanic: updates.assignedMechanic || targetWO.assignedMechanic || 'Assigned Mechanic',
+            serviceType: targetWO.type || 'Maintenance Service',
+            serviceSummary: fullSummary,
+            laborCost: 0,
+            partsCost: 0,
+            totalCost: Number(targetWO.incurredCost) || 0,
+            partsReplaced: allPartsReplaced,
+            approvedBy: 'Engr. Roberto M. Alcantara (Fleet Operations Director)'
+          },
+          ...prev
+        ];
+      });
+    }
+
+    pushNotification({
+      type: 'MAINTENANCE',
+      severity: 'INFO',
+      title: `${targetWO.vehicleCode} · ${newStage}`,
+      message: isCompleted && (updates.mechanicNote || updates.description)
+        ? `${targetWO.type} completed — "${(updates.mechanicNote || updates.description).trim()}"`
+        : `${targetWO.type} updated to "${newStage}".`,
+      targetTab: isCompleted && updates.createReport ? 'auditing' : 'maintenance',
+      targetEntityType: 'WORK_ORDER',
+      targetEntityId: woId,
+      recipientRole: newStage === 'Completed / Released' ? 'DIRECTOR' : 'ALL',
+      recipientName: updates.assignedMechanic || targetWO.assignedMechanic || null
+    });
 
     logAuditEvent(
       'Maintenance Stage Updated',
@@ -692,9 +1213,13 @@ export const FleetProvider = ({ children }) => {
         date: targetWO.dateCompleted || today,
         vehicleCode: targetWO.vehicleCode,
         plateNo: targetWO.plateNo || v?.plateNo || 'N/A',
+        model: v?.makeModel || targetWO.classification || 'Utility Vehicle',
         branchId: targetWO.branchId || v?.branchId || 'BR-KID',
+        repairScope: 'IN_HOUSE',
         facility: targetWO.facility || 'COTELCO Central Motorpool',
+        mechanic: targetWO.assignedMechanic || 'Assigned Mechanic',
         serviceType: targetWO.type || 'Maintenance Service',
+        serviceSummary: targetWO.mechanicNote || targetWO.description || targetWO.notes || 'Completed maintenance service.',
         laborCost: 0,
         partsCost: 0,
         totalCost: Number(targetWO.incurredCost) || 0,
@@ -874,6 +1399,18 @@ export const FleetProvider = ({ children }) => {
       `Vehicle ${targetWO.vehicleCode} returned from ${targetWO.facility || 'outside shop'}. Incurred: ₱${total.toLocaleString()}. Voucher: ${voucherNo}`
     );
 
+    pushNotification({
+      type: 'MAINTENANCE',
+      severity: 'INFO',
+      title: `${targetWO.vehicleCode} · Maintenance Completed`,
+      message: `Cleared from ${targetWO.facility || 'shop'} (${voucherNo}). Returned to active fleet.`,
+      targetTab: 'auditing',
+      targetEntityType: 'REPORT',
+      targetEntityId: voucherNo,
+      recipientRole: 'DIRECTOR',
+      recipientName: null
+    });
+
     return newVoucher;
   };
 
@@ -929,6 +1466,18 @@ export const FleetProvider = ({ children }) => {
       'OPERATIONS_REPORT',
       `Recorded service report ${voucherNo} on ${newVoucher.vehicleCode} (${newVoucher.facility}).`
     );
+
+    pushNotification({
+      type: 'REPORT',
+      severity: 'INFO',
+      title: `${newVoucher.vehicleCode} · New Service Report`,
+      message: `${newVoucher.serviceType} logged by ${(newVoucher.mechanic || 'Staff').split(' (')[0].trim()}.`,
+      targetTab: 'auditing',
+      targetEntityType: 'REPORT',
+      targetEntityId: voucherNo,
+      recipientRole: 'DIRECTOR',
+      recipientName: null
+    });
 
     return newVoucher;
   };
@@ -1028,6 +1577,18 @@ export const FleetProvider = ({ children }) => {
       'ASSET_REGISTRY',
       `Commissioned new vehicle ${newVehicle.code} (${newVehicle.plateNo}) - ${newVehicle.makeModel} to ${branch?.name}.`
     );
+
+    pushNotification({
+      type: 'SYSTEM',
+      severity: 'INFO',
+      title: `${newVehicle.code} · Vehicle Added`,
+      message: `${newVehicle.makeModel} (${newVehicle.plateNo}) registered to ${branch?.municipality || 'station'}.`,
+      targetTab: 'profiling',
+      targetEntityType: 'VEHICLE',
+      targetEntityId: newVehicle.id,
+      recipientRole: 'DIRECTOR',
+      recipientName: null
+    });
 
     return newVehicle;
   };
@@ -1193,29 +1754,135 @@ export const FleetProvider = ({ children }) => {
   };
 
   const addBooking = (newBooking) => {
+    const isMechActor = settings.currentRole === 'MECHANIC';
+    const actorName = isMechActor
+      ? (settings.currentMechanic || 'Assigned Mechanic').split(' (')[0].trim()
+      : 'Operations Director';
+
     const bookingWithId = {
       ...newBooking,
       id: newBooking.id || `BK-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`,
-      status: newBooking.status || 'Scheduled'
+      status: newBooking.status || 'Scheduled',
+      createdByRole: newBooking.createdByRole || settings.currentRole,
+      createdBy: newBooking.createdBy || (isMechActor ? settings.currentMechanic : 'Operations Director')
     };
     setBookings(prev => [bookingWithId, ...prev]);
+
+    const vehicleLabel = bookingWithId.vehicleCode && bookingWithId.vehicleCode !== 'NOTE'
+      ? bookingWithId.vehicleCode
+      : 'Calendar Note';
+
     logAuditEvent(
       'Vehicle Scheduled',
       newBooking.type === 'MAINTENANCE' ? 'MAINTENANCE' : 'DISPATCH',
-      `Scheduled ${newBooking.vehicleCode} for ${newBooking.title} on ${newBooking.date} (${newBooking.startTime || ''}-${newBooking.endTime || ''})`
+      `${actorName} scheduled ${vehicleLabel} for ${bookingWithId.title} on ${bookingWithId.date} (${bookingWithId.startTime || ''}-${bookingWithId.endTime || ''})`
     );
+
+    if (isMechActor) {
+      const rangeStr = bookingWithId.deadline && bookingWithId.deadline > bookingWithId.date
+        ? `${bookingWithId.date} → ${bookingWithId.deadline}`
+        : bookingWithId.date;
+      pushNotification({
+        type: 'SCHEDULE',
+        severity: 'INFO',
+        title: `${vehicleLabel} · Schedule Added by Mechanic`,
+        message: `${actorName} scheduled "${bookingWithId.title}" on ${rangeStr} (${bookingWithId.startTime || '08:00'}–${bookingWithId.endTime || '17:00'}).`,
+        targetTab: 'bookings',
+        targetEntityType: 'BOOKING',
+        targetEntityId: bookingWithId.id,
+        recipientRole: 'DIRECTOR',
+        recipientName: null
+      });
+    }
+
     return bookingWithId;
   };
 
   const updateBooking = (id, updates) => {
+    const existing = bookings.find(b => b.id === id);
+    const isMechActor = settings.currentRole === 'MECHANIC';
+    const actorName = isMechActor
+      ? (settings.currentMechanic || 'Assigned Mechanic').split(' (')[0].trim()
+      : 'Operations Director';
+
     setBookings(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
-    logAuditEvent('Booking Updated', 'DISPATCH', `Updated booking record ${id}`);
+
+    const updated = existing ? { ...existing, ...updates } : updates;
+    const changes = [];
+    if (existing) {
+      if (updates.date && updates.date !== existing.date) {
+        changes.push(`date ${existing.date} → ${updates.date}`);
+      }
+      if (updates.deadline && updates.deadline !== existing.deadline) {
+        changes.push(`end date → ${updates.deadline}`);
+      }
+      if ((updates.startTime && updates.startTime !== existing.startTime) || (updates.endTime && updates.endTime !== existing.endTime)) {
+        changes.push(`time ${updates.startTime || existing.startTime}–${updates.endTime || existing.endTime}`);
+      }
+      if (updates.status && updates.status !== existing.status) {
+        changes.push(`status: ${updates.status}`);
+      }
+      if (updates.title && updates.title !== existing.title) {
+        changes.push(`title: "${updates.title}"`);
+      }
+      if (updates.driver && updates.driver !== existing.driver) {
+        changes.push(`assigned: ${updates.driver.split(' (')[0]}`);
+      }
+    }
+    const changeSummary = changes.length > 0 ? changes.join(', ') : 'schedule details updated';
+    const vehicleLabel = updated.vehicleCode && updated.vehicleCode !== 'NOTE'
+      ? updated.vehicleCode
+      : 'Calendar Note';
+
+    logAuditEvent(
+      'Schedule Updated',
+      updated.type === 'MAINTENANCE' ? 'MAINTENANCE' : 'DISPATCH',
+      `${actorName} updated schedule ${id} (${vehicleLabel}): ${changeSummary}`
+    );
+
+    pushNotification({
+      type: 'SCHEDULE',
+      severity: updates.status === 'Completed' ? 'INFO' : 'WARNING',
+      title: `${vehicleLabel} · Schedule Changed`,
+      message: `${actorName} updated "${updated.title || 'Schedule'}" (${changeSummary}).`,
+      targetTab: 'bookings',
+      targetEntityType: 'BOOKING',
+      targetEntityId: id,
+      recipientRole: 'DIRECTOR',
+      recipientName: null
+    });
   };
 
   const deleteBooking = (id) => {
     const item = bookings.find(b => b.id === id);
+    const isMechActor = settings.currentRole === 'MECHANIC';
+    const actorName = isMechActor
+      ? (settings.currentMechanic || 'Assigned Mechanic').split(' (')[0].trim()
+      : 'Operations Director';
+
     setBookings(prev => prev.filter(b => b.id !== id));
-    logAuditEvent('Booking Cancelled', 'DISPATCH', `Cancelled booking ${id} for ${item?.vehicleCode || 'vehicle'}`);
+
+    const vehicleLabel = item?.vehicleCode && item.vehicleCode !== 'NOTE'
+      ? item.vehicleCode
+      : 'Calendar Note';
+
+    logAuditEvent(
+      'Booking Cancelled',
+      'DISPATCH',
+      `${actorName} removed schedule ${id} for ${vehicleLabel}`
+    );
+
+    pushNotification({
+      type: 'SCHEDULE',
+      severity: 'WARNING',
+      title: `${vehicleLabel} · Schedule Removed`,
+      message: `${actorName} cancelled "${item?.title || 'Schedule'}" (${item?.date || ''}).`,
+      targetTab: 'bookings',
+      targetEntityType: 'BOOKING',
+      targetEntityId: id,
+      recipientRole: 'DIRECTOR',
+      recipientName: null
+    });
   };
 
   const addDriver = (driverData) => {
@@ -1234,7 +1901,8 @@ export const FleetProvider = ({ children }) => {
       assignedVehicleCode: driverData.assignedVehicleCode || '',
       licenseNo: driverData.licenseNo?.trim() || 'L02-24-000000',
       licenseType: driverData.licenseType || 'Professional (RC 1, 2)',
-      licenseExpiry: driverData.licenseExpiry || '2028-12-31',
+      licenseAcquiredDate: driverData.licenseAcquiredDate || new Date().toISOString().slice(0, 10),
+      licenseExpiry: driverData.licenseExpiry || '2029-12-31',
       phone: driverData.phone?.trim() || '0919-000-0000',
       email: driverData.email?.trim() || '',
       status: driverData.status || 'ON-DUTY',
@@ -1266,9 +1934,22 @@ export const FleetProvider = ({ children }) => {
   const updateDriver = (id, updates) => {
     if (!checkPermission(['DIRECTOR'], 'Update Driver Record')) return false;
 
+    let renewedDriver = null;
     setDrivers(prev => prev.map(d => {
       if (d.id === id) {
-        const updated = { ...d, ...updates };
+        const nextHistory = Array.isArray(d.licenseHistory) ? [...d.licenseHistory] : [];
+        if (updates.licenseExpiry && updates.licenseExpiry !== d.licenseExpiry) {
+          nextHistory.unshift({
+            id: `LIC-REN-${Date.now()}`,
+            licenseNo: updates.licenseNo || d.licenseNo,
+            licenseType: updates.licenseType || d.licenseType,
+            dateAcquired: updates.licenseAcquiredDate || new Date().toISOString().slice(0, 10),
+            expiryDate: updates.licenseExpiry,
+            status: 'RENEWED'
+          });
+        }
+        const updated = { ...d, ...updates, licenseHistory: nextHistory };
+        renewedDriver = updated;
         if (updates.assignedVehicleCode && updates.assignedVehicleCode !== d.assignedVehicleCode) {
           setVehicles(vPrev => vPrev.map(v => {
             if (v.code === updates.assignedVehicleCode) return { ...v, assignedDriver: updated.name };
@@ -1283,7 +1964,26 @@ export const FleetProvider = ({ children }) => {
 
     setSelectedDriver(prev => (prev && prev.id === id ? { ...prev, ...updates } : prev));
 
-    logAuditEvent('Driver Updated', 'DISPATCH', `Updated driver record ${id}`);
+    if (updates.licenseExpiry && renewedDriver) {
+      logAuditEvent(
+        "Driver's License Renewed",
+        'DISPATCH',
+        `Updated driver's license (${renewedDriver.licenseNo}) for ${renewedDriver.name} — new expiry ${updates.licenseExpiry}.`
+      );
+      pushNotification({
+        type: 'DOCUMENT_EXPIRY',
+        severity: 'INFO',
+        title: `${renewedDriver.name} · Driver's License Updated`,
+        message: `License ${renewedDriver.licenseNo} valid until ${updates.licenseExpiry}.`,
+        targetTab: 'drivers',
+        targetEntityType: 'DRIVER',
+        targetEntityId: id,
+        recipientRole: 'DIRECTOR',
+        recipientName: null
+      });
+    } else {
+      logAuditEvent('Driver Updated', 'DISPATCH', `Updated driver record ${id}`);
+    }
     return true;
   };
 
@@ -1447,6 +2147,8 @@ export const FleetProvider = ({ children }) => {
       setAuditLogs(DEFAULT_AUDIT_LOGS);
       setBookings(DEFAULT_BOOKINGS);
       setDrivers(DEFAULT_DRIVERS);
+      setStoredNotifications([]);
+      setNotificationState({ readIds: [], dismissedIds: [] });
       setSettings({
         seniorMode: false,
         highContrast: false,
@@ -1479,6 +2181,16 @@ export const FleetProvider = ({ children }) => {
       setFocusedHealthVehicleId,
       focusedProfileVehicleId,
       setFocusedProfileVehicleId,
+      focusedMaintenanceIds,
+      setFocusedMaintenanceIds,
+      focusedTabPulse,
+      setFocusedTabPulse,
+      notifications,
+      unreadNotificationCount,
+      pushNotification,
+      markNotificationRead,
+      markAllNotificationsRead,
+      dismissNotification,
       selectedVehicle,
       setSelectedVehicle,
       selectedBooking,

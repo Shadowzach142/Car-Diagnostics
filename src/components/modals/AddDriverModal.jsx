@@ -23,12 +23,18 @@ export const AddDriverModal = () => {
   const [category, setCategory] = useState(employeeClassifications[0] || 'Heavy Equipment');
   const [branchId, setBranchId] = useState(branches[0]?.id || 'BR-KID');
   const [phone, setPhone] = useState('0919-550-2211');
+  const [licenseNo, setLicenseNo] = useState(`L02-26-${Math.floor(100000 + Math.random() * 900000)}`);
+  const [licenseType, setLicenseType] = useState('Professional (RC 1, 2)');
+  const [licenseExpiry, setLicenseExpiry] = useState('2029-11-21');
 
   useEffect(() => {
     if (modalType === 'add-driver') {
       setName('');
       setEmployeeId(`EMP-2026-${Math.floor(100 + Math.random() * 900)}`);
       setPhone('0919-550-2211');
+      setLicenseNo(`L02-26-${Math.floor(100000 + Math.random() * 900000)}`);
+      setLicenseType('Professional (RC 1, 2)');
+      setLicenseExpiry('2029-11-21');
       if (jobTitles.length > 0 && !jobTitles.includes(title)) setTitle(jobTitles[0]);
       if (departments.length > 0 && !departments.includes(department)) setDepartment(departments[0]);
       if (employeeClassifications.length > 0 && !employeeClassifications.includes(category)) setCategory(employeeClassifications[0]);
@@ -50,9 +56,10 @@ export const AddDriverModal = () => {
       department: department.trim(),
       category,
       branchId,
-      licenseNo: 'N/A',
-      licenseExpiry: '2028-12-31',
-      licenseType: 'Authorized Cooperative Operator',
+      licenseNo: licenseNo.trim() || 'L02-26-000000',
+      licenseAcquiredDate: new Date().toISOString().slice(0, 10),
+      licenseExpiry: licenseExpiry || '2029-11-21',
+      licenseType: licenseType.trim() || 'Professional (RC 1, 2)',
       phone: phone.trim(),
       status: 'ACTIVE'
     });
@@ -208,6 +215,44 @@ export const AddDriverModal = () => {
                     <option key={cls} value={cls}>{cls}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            {/* Row 4: Driver's License Tracking & Expiry */}
+            <div className="responsive-grid-3" style={{ marginBottom: '0.5rem' }}>
+              <div className="form-group">
+                <label className="form-label">Driver&apos;s License No.: *</label>
+                <input
+                  type="text"
+                  className="form-input mono"
+                  value={licenseNo}
+                  onChange={(e) => setLicenseNo(e.target.value)}
+                  placeholder="L02-26-000000"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">License Type / DL Code: *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={licenseType}
+                  onChange={(e) => setLicenseType(e.target.value)}
+                  placeholder="Professional (RC 1, 2)"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">License Expiry Date: *</label>
+                <input
+                  type="date"
+                  className="form-input mono"
+                  value={licenseExpiry}
+                  onChange={(e) => setLicenseExpiry(e.target.value)}
+                  required
+                />
               </div>
             </div>
           </div>

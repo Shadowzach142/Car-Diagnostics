@@ -7,7 +7,7 @@ import {
   Activity,
   Wrench,
   FileText,
-  ShieldCheck,
+  FolderArchive,
   Users,
   User,
   Sliders,
@@ -17,12 +17,22 @@ import {
 
 const COMPLETED = 'Completed / Released';
 
+const isExpiringOrExpired = (expiryStr) => {
+  if (!expiryStr) return false;
+  const exp = new Date(expiryStr);
+  if (isNaN(exp)) return false;
+  const diffDays = Math.ceil((exp - new Date()) / (1000 * 60 * 60 * 24));
+  return diffDays <= 90;
+};
+
 export const Sidebar = () => {
   const {
     activeTab,
     setActiveTab,
     sidebarCollapsed,
     toggleSidebar,
+    vehicles = [],
+    drivers = [],
     workOrders,
     bookings,
     settings
@@ -41,16 +51,28 @@ export const Sidebar = () => {
     : (bookings || []);
   const activeBookingsCount = visibleBookings.filter(b => b.status !== 'Completed').length;
 
+  let unresolvedDocsCount = 0;
+  if (!isMechanic) {
+    (vehicles || []).forEach(v => {
+      if (isExpiringOrExpired(v.insuranceExpiryDate)) unresolvedDocsCount += 1;
+      if (isExpiringOrExpired(v.registrationExpiryDate)) unresolvedDocsCount += 1;
+    });
+  }
+
+  const unresolvedLicensesCount = !isMechanic
+    ? (drivers || []).filter(d => isExpiringOrExpired(d.licenseExpiry)).length
+    : 0;
+
   const allNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'profiling', label: 'Car Profiling', icon: Car },
-    { id: 'drivers', label: 'Employees', icon: Users },
+    { id: 'profiling', label: 'Car Profiling', icon: Car, badge: unresolvedDocsCount },
+    { id: 'drivers', label: 'Employees', icon: Users, badge: unresolvedLicensesCount },
     { id: 'bookings', label: 'Calendar', icon: CalendarDays, badge: activeBookingsCount },
     { id: 'health', label: 'Ongoing Health', icon: Activity },
     { id: 'maintenance', label: 'Maintenance', icon: Wrench, badge: openOrders },
     { id: 'auditing', label: 'Reports', icon: FileText },
-    { id: 'editables', label: 'Editables', icon: Sliders },
-    { id: 'governance', label: 'Security & Audit', icon: ShieldCheck }
+    { id: 'archive', label: 'Archive', icon: FolderArchive },
+    { id: 'editables', label: 'Editables', icon: Sliders }
   ];
 
   const navItems = isMechanic

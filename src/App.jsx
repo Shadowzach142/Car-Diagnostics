@@ -6,7 +6,7 @@ import { Dashboard } from './components/Dashboard';
 import { OngoingHealth } from './components/OngoingHealth';
 import { MaintenanceHub } from './components/MaintenanceHub';
 import { RepairArchive } from './components/RepairArchive';
-import { SecurityAudit } from './components/SecurityAudit';
+import { ArchiveHub } from './components/ArchiveHub';
 import { EditablesConfig } from './components/EditablesConfig';
 import { MechanicProfile } from './components/MechanicProfile';
 
@@ -52,8 +52,8 @@ const AppContent = () => {
             {effectiveTab === 'health' && <OngoingHealth />}
             {effectiveTab === 'maintenance' && <MaintenanceHub />}
             {effectiveTab === 'auditing' && <RepairArchive />}
+            {effectiveTab === 'archive' && <ArchiveHub />}
             {effectiveTab === 'editables' && <EditablesConfig />}
-            {effectiveTab === 'governance' && <SecurityAudit />}
             {effectiveTab === 'profile' && <MechanicProfile />}
           </div>
         </main>
