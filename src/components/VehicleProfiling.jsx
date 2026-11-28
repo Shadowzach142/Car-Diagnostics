@@ -74,6 +74,8 @@ export const VehicleProfiling = () => {
     drivers = [],
     branches = [],
     workOrders = [],
+    driverVehicles = [],
+    setTripDraft,
     globalSearch,
     setFocusedHealthVehicleId,
     focusedProfileVehicleId,
@@ -84,6 +86,8 @@ export const VehicleProfiling = () => {
   } = useFleet();
 
   const isMechanic = settings?.currentRole === 'MECHANIC';
+  const isDriver = settings?.currentRole === 'DRIVER';
+  const isDirector = settings?.currentRole === 'DIRECTOR';
   const mechNameNorm = (settings?.currentMechanic || '').split(' (')[0].trim().toLowerCase();
   const matchedDriver = useMemo(
     () => drivers.find(d => (d.name || '').trim().toLowerCase() === mechNameNorm),
@@ -131,20 +135,7 @@ export const VehicleProfiling = () => {
   }, [focusedProfileVehicleId, setFocusedProfileVehicleId]);
 
   const filteredVehicles = useMemo(() => {
-    let list = vehicles;
-
-    if (isMechanic) {
-      if (matchedDriver) {
-        list = list.filter(v => (v.authorizedDriverIds || []).includes(matchedDriver.id));
-      } else {
-        const orderVehicleCodes = new Set(
-          workOrders
-            .filter(wo => (wo.assignedMechanic || '').split(' (')[0].trim().toLowerCase() === mechNameNorm)
-            .map(wo => wo.vehicleCode)
-        );
-        list = list.filter(v => orderVehicleCodes.has(v.code));
-      }
-    }
+    let list = isDriver ? driverVehicles : vehicles;
 
     if (branchFilter !== 'ALL') {
       list = list.filter(v => v.branchId === branchFilter);
@@ -171,7 +162,7 @@ export const VehicleProfiling = () => {
       ];
       return searchFields.some(f => String(f || '').toLowerCase().includes(q));
     });
-  }, [vehicles, drivers, branchFilter, categoryFilter, globalSearch]);
+  }, [vehicles, driverVehicles, isDriver, drivers, branchFilter, categoryFilter, globalSearch]);
 
   const resetFilters = () => {
     setBranchFilter('ALL');
@@ -245,14 +236,16 @@ export const VehicleProfiling = () => {
           </button>
         </div>
 
-        <button
-          type="button"
-          className="btn btn-primary no-print"
-          onClick={() => setModalType('add-vehicle')}
-          title="Register new utility vehicle asset"
-        >
-          <Plus size={16} /> Add Vehicle
-        </button>
+        {isDirector && (
+          <button
+            type="button"
+            className="btn btn-primary no-print"
+            onClick={() => setModalType('add-vehicle')}
+            title="Register new utility vehicle asset"
+          >
+            <Plus size={16} /> Add Vehicle
+          </button>
+        )}
       </div>
 
       {/* Page Body */}
@@ -372,9 +365,9 @@ export const VehicleProfiling = () => {
                       type="button"
                       onClick={() => {
                         setSelectedVehicle(v);
-                        setModalType('vehicle-access');
+                        setModalType(isDirector ? 'vehicle-access' : 'vehicle-detail');
                       }}
-                      title={`Manage authorized personnel for ${v.code}`}
+                      title={isDirector ? `Manage authorized personnel for ${v.code}` : `View authorized personnel for ${v.code}`}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -542,32 +535,63 @@ export const VehicleProfiling = () => {
                     >
                       View Profile
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFocusedHealthVehicleId(v.id);
-                        setActiveTab('health');
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.55rem 0.65rem',
-                        borderRadius: '8px',
-                        background: 'var(--bg-surface-subtle)',
-                        border: '1px solid var(--border-light)',
-                        color: 'var(--text-main)',
-                        fontSize: '0.8rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.35rem',
-                        transition: 'background 0.15s ease'
-                      }}
-                      title={`View ${v.code} in Ongoing Health`}
-                    >
-                      <Activity size={13} /> Car Health
-                    </button>
+                    {isDriver ? (
+                      <button
+                        type="button"
+                        disabled={v.status !== 'ACTIVE'}
+                        onClick={() => {
+                          if (setTripDraft) setTripDraft({ vehicleId: v.id });
+                          setModalType('log-trip');
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '0.55rem 0.65rem',
+                          borderRadius: '8px',
+                          background: 'var(--primary)',
+                          border: '1px solid var(--primary)',
+                          color: 'var(--text-main)',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          cursor: v.status === 'ACTIVE' ? 'pointer' : 'not-allowed',
+                          opacity: v.status === 'ACTIVE' ? 1 : 0.5,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.35rem',
+                          transition: 'background 0.15s ease'
+                        }}
+                        title={`Log a trip for ${v.code}`}
+                      >
+                        Log trip
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFocusedHealthVehicleId(v.id);
+                          setActiveTab('health');
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '0.55rem 0.65rem',
+                          borderRadius: '8px',
+                          background: 'var(--bg-surface-subtle)',
+                          border: '1px solid var(--border-light)',
+                          color: 'var(--text-main)',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.35rem',
+                          transition: 'background 0.15s ease'
+                        }}
+                        title={`View ${v.code} in Vehicle Health`}
+                      >
+                        <Activity size={13} /> Car Health
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -629,7 +653,7 @@ export const VehicleProfiling = () => {
                             className="btn btn-sm btn-outline"
                             onClick={() => {
                               setSelectedVehicle(v);
-                              setModalType('vehicle-access');
+                              setModalType(isDirector ? 'vehicle-access' : 'vehicle-detail');
                             }}
                           >
                             {authorizedDrivers.length} Authorized
@@ -639,16 +663,31 @@ export const VehicleProfiling = () => {
                         <td><ValidityPill state={regState} /></td>
                         <td className="num">
                           <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline"
-                              onClick={() => {
-                                setGlobalSearch(v.code);
-                                setActiveTab('health');
-                              }}
-                            >
-                              <Activity size={13} /> Car Health
-                            </button>
+                            {isDriver ? (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-primary"
+                                disabled={v.status !== 'ACTIVE'}
+                                style={{ opacity: v.status === 'ACTIVE' ? 1 : 0.5 }}
+                                onClick={() => {
+                                  if (setTripDraft) setTripDraft({ vehicleId: v.id });
+                                  setModalType('log-trip');
+                                }}
+                              >
+                                Log trip
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline"
+                                onClick={() => {
+                                  setGlobalSearch(v.code);
+                                  setActiveTab('health');
+                                }}
+                              >
+                                <Activity size={13} /> Car Health
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="btn btn-sm btn-outline"

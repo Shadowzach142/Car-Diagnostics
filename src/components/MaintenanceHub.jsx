@@ -1007,7 +1007,7 @@ export const MaintenanceHub = () => {
                   }}
                 >
                   <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.55rem' }}>
-                    NEXT SERVICE INTERVAL (UPDATES ONGOING HEALTH)
+                    NEXT SERVICE INTERVAL (UPDATES VEHICLE HEALTH)
                   </div>
                   <div className="responsive-grid-2" style={{ gap: '0.65rem' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
@@ -1403,7 +1403,7 @@ export const MaintenanceHub = () => {
                   padding: '0.8rem'
                 }}>
                   <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
-                    NEXT SERVICE INTERVAL (UPDATES ONGOING HEALTH)
+                    NEXT SERVICE INTERVAL (UPDATES VEHICLE HEALTH)
                   </div>
                   <div className="responsive-grid-2" style={{ gap: '0.7rem' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>

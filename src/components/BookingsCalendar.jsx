@@ -405,7 +405,17 @@ export const BookingsCalendar = () => {
   const handleBookingClick = (booking) => {
     if (isDriver) {
       if (booking.isComplianceRecord) {
-        setActiveTab(booking.complianceSubType === 'LICENSE_EXPIRY' ? 'profile' : 'profiling');
+        if (booking.complianceSubType === 'LICENSE_EXPIRY') {
+          setActiveTab('profile');
+          return;
+        }
+        const targetVeh = (driverVehicles || []).find(v => v.id === booking.vehicleId || v.code === booking.vehicleCode);
+        if (targetVeh) {
+          setSelectedVehicle(targetVeh);
+          setModalType('vehicle-detail');
+          return;
+        }
+        setActiveTab('profiling');
         return;
       }
       setSelectedBooking(booking);
@@ -443,6 +453,10 @@ export const BookingsCalendar = () => {
   // Drag and Drop drop handler to reschedule (also updates vehicle insurance/registration date if dragged!)
   const handleDropSlot = (targetDateStr, targetHourVal = null, fallbackId = null) => {
     setDragOverSlot(null);
+    if (!canEditCalendar) {
+      setDraggedBookingId(null);
+      return;
+    }
     const activeId = draggedBookingId || fallbackId;
     if (!activeId) return;
 
@@ -450,7 +464,7 @@ export const BookingsCalendar = () => {
     if (!b) return;
 
     if (b.isComplianceRecord) {
-      if (b.date === targetDateStr) {
+      if (isMechanic || b.date === targetDateStr) {
         setDraggedBookingId(null);
         return;
       }
@@ -927,23 +941,25 @@ export const BookingsCalendar = () => {
                                       </div>
                                       <div className="booking-card-subtitle">{b.title}</div>
                                     </div>
-                                    <button
-                                      type="button"
-                                      className="booking-card-quick-edit"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (b.isComplianceRecord && v) {
-                                          setSelectedVehicle(v);
-                                          setModalType('vehicle-detail');
-                                        } else {
-                                          setSelectedBooking(b);
-                                          setModalType('edit-booking');
-                                        }
-                                      }}
-                                      title={b.isComplianceRecord ? 'Edit insurance/registration dates in Vehicle Profile' : 'Edit schedule details'}
-                                    >
-                                      <Pencil size={11} />
-                                    </button>
+                                    {canEditCalendar && (
+                                      <button
+                                        type="button"
+                                        className="booking-card-quick-edit"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (b.isComplianceRecord && v) {
+                                            setSelectedVehicle(v);
+                                            setModalType('vehicle-detail');
+                                          } else {
+                                            setSelectedBooking(b);
+                                            setModalType('edit-booking');
+                                          }
+                                        }}
+                                        title={b.isComplianceRecord ? 'Edit insurance/registration dates in Vehicle Profile' : 'Edit schedule details'}
+                                      >
+                                        <Pencil size={11} />
+                                      </button>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -1014,13 +1030,6 @@ export const BookingsCalendar = () => {
 
                   {Array.from({ length: Math.ceil(monthGrid.length / 7) }, (_, wIdx) => {
                     const weekCells = monthGrid.slice(wIdx * 7, wIdx * 7 + 7);
-                    const weekStart = weekCells[0]?.dateStr;
-                    const weekEnd = weekCells[weekCells.length - 1]?.dateStr;
-
-                    const weekSpanning = filteredBookings.filter(b => {
-                      const endStr = b.deadline || b.date;
-                      return endStr > b.date && b.date <= weekEnd && endStr >= weekStart;
-                    });
 
                     return (
                       <div
@@ -1033,29 +1042,23 @@ export const BookingsCalendar = () => {
                         }}
                       >
                         {weekCells.map((cell, idx) => {
-                          const singleDayBookings = filteredBookings.filter(b => {
+                          const cellBookings = filteredBookings.filter(b => {
                             const endStr = b.deadline || b.date;
-                            return endStr <= b.date && b.date === cell.dateStr;
+                            return cell.dateStr >= b.date && cell.dateStr <= endStr;
                           });
-                          const dayTotalCount = singleDayBookings.length + weekSpanning.filter(b => {
-                            const endStr = b.deadline || b.date;
-                            return cell.dateStr >= b.date && cell.dateStr <= endStr;
-                          }).length;
                           const isSelected = cell.dateStr === selectedDateStr;
-                          const spanLaneOffset = weekSpanning.filter(b => {
-                            const endStr = b.deadline || b.date;
-                            return cell.dateStr >= b.date && cell.dateStr <= endStr;
-                          }).length;
 
                           const isDropTarget = dragOverSlot === `month-${cell.dateStr}`;
-                          const hasExpiryOnDay = singleDayBookings.some(isExpiryEvent);
+                          const hasExpiryOnDay = cellBookings.some(isExpiryEvent);
 
                           return (
                             <div
                               key={`${cell.dateStr}-${idx}`}
                               className={`month-cell ${!cell.isCurrentMonth ? 'outside' : ''} ${cell.isToday ? 'today' : ''} ${isDropTarget ? 'slot-drag-target' : ''}`}
-                              style={
-                                isDropTarget
+                              style={{
+                                minWidth: 0,
+                                overflow: 'hidden',
+                                ...(isDropTarget
                                   ? {
                                       boxShadow: 'inset 0 0 0 2px #16A34A',
                                       background: '#DCFCE7'
@@ -1070,8 +1073,8 @@ export const BookingsCalendar = () => {
                                       boxShadow: 'inset 0 0 0 1.5px #FCA5A5',
                                       background: '#FEF2F2'
                                     }
-                                  : undefined
-                              }
+                                  : {})
+                              }}
                               onClick={() => setSelectedDateStr(cell.dateStr)}
                               onDragOver={(e) => {
                                 e.preventDefault();
@@ -1120,9 +1123,12 @@ export const BookingsCalendar = () => {
 
                               <div
                                 className="month-events-list"
-                                style={spanLaneOffset > 0 ? { paddingTop: `${weekSpanning.length * 25}px` } : undefined}
+                                style={{ minWidth: 0, overflow: 'hidden' }}
                               >
-                                {singleDayBookings.slice(0, 3).map(b => {
+                                {cellBookings.slice(0, 3).map(b => {
+                                  const endStr = b.deadline || b.date;
+                                  const isMultiDay = endStr > b.date;
+                                  const isDueDay = isMultiDay && cell.dateStr === endStr;
                                   const isCompliance = b.type === 'COMPLIANCE';
                                   const isExpiry = isExpiryEvent(b);
                                   const isReg = b.complianceSubType?.includes('REGISTRATION');
@@ -1130,7 +1136,7 @@ export const BookingsCalendar = () => {
 
                                   return (
                                     <div
-                                      key={b.id}
+                                      key={`${b.id}-${cell.dateStr}`}
                                       draggable={canEditCalendar}
                                       onDragStart={(e) => {
                                         e.stopPropagation();
@@ -1144,7 +1150,9 @@ export const BookingsCalendar = () => {
                                       }}
                                       className={`month-event-chip ${b.type === 'MAINTENANCE' ? 'chip-maint' : 'chip-dispatch'} ${draggedBookingId === b.id ? 'is-dragging' : ''}`}
                                       style={{
-                                        cursor: 'grab',
+                                        cursor: canEditCalendar ? 'grab' : 'pointer',
+                                        maxWidth: '100%',
+                                        minWidth: 0,
                                         ...(isExpiry
                                           ? {
                                               background: '#FEE2E2',
@@ -1172,7 +1180,11 @@ export const BookingsCalendar = () => {
                                         setSelectedDateStr(cell.dateStr);
                                         handleBookingClick(b);
                                       }}
-                                      title={`Drag to reschedule · ${b.vehicleCode} · ${b.title}`}
+                                      title={
+                                        isMultiDay
+                                          ? `${b.vehicleCode} · ${b.title} (${b.date} → Due ${endStr})`
+                                          : `${b.vehicleCode} · ${b.title}`
+                                      }
                                     >
                                       <span
                                         className="chip-dot"
@@ -1186,105 +1198,24 @@ export const BookingsCalendar = () => {
                                             : undefined
                                         }
                                       />
-                                      <span className="chip-text">
+                                      <span className="chip-text" style={{ flex: 1, minWidth: 0 }}>
                                         {b.vehicleCode && b.vehicleCode !== 'NOTE' ? `${b.vehicleCode}: ` : ''}{b.title}
                                       </span>
+                                      {isMultiDay && (
+                                        <span style={{ fontSize: '0.62rem', fontWeight: 700, opacity: 0.85, flexShrink: 0, marginLeft: '2px' }}>
+                                          {isDueDay ? `Due ${endStr.slice(5)}` : `→${endStr.slice(5)}`}
+                                        </span>
+                                      )}
                                     </div>
                                   );
                                 })}
-                                {singleDayBookings.length > 3 && (
-                                  <div className="month-more-chip">+{singleDayBookings.length - 3} more</div>
+                                {cellBookings.length > 3 && (
+                                  <div className="month-more-chip">+{cellBookings.length - 3} more</div>
                                 )}
                               </div>
                             </div>
                           );
                         })}
-
-                        {/* Seamless Multi-Day Spanning Bars Overlay for this Week Row */}
-                        {weekSpanning.length > 0 && (
-                          <div
-                            style={{
-                              position: 'absolute',
-                              top: '33px',
-                              left: 0,
-                              right: 0,
-                              display: 'grid',
-                              gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-                              rowGap: '3px',
-                              pointerEvents: 'none',
-                              zIndex: 3
-                            }}
-                          >
-                            {weekSpanning.map((b, laneIdx) => {
-                              const endStr = b.deadline || b.date;
-                              const clampedStart = b.date < weekStart ? weekStart : b.date;
-                              const clampedEnd = endStr > weekEnd ? weekEnd : endStr;
-                              const startIdx = Math.max(0, weekCells.findIndex(c => c.dateStr === clampedStart));
-                              const endIdx = Math.max(startIdx, weekCells.findIndex(c => c.dateStr === clampedEnd));
-                              const spanCols = endIdx - startIdx + 1;
-                              const continuesLeft = b.date < weekStart;
-                              const continuesRight = endStr > weekEnd;
-                              const isCompleted = b.status === 'Completed' || b.status === 'Completed / Released';
-                              const isMaint = b.type === 'MAINTENANCE';
-
-                              return (
-                                <div
-                                  key={`span-${wIdx}-${b.id}`}
-                                  draggable={canEditCalendar}
-                                  onDragStart={(e) => {
-                                    e.stopPropagation();
-                                    e.dataTransfer.setData('text/plain', b.id);
-                                    e.dataTransfer.effectAllowed = 'move';
-                                    setDraggedBookingId(b.id);
-                                  }}
-                                  onDragEnd={() => {
-                                    setDraggedBookingId(null);
-                                    setDragOverSlot(null);
-                                  }}
-                                  className={`month-event-chip ${isMaint ? 'chip-maint' : 'chip-dispatch'} ${draggedBookingId === b.id ? 'is-dragging' : ''}`}
-                                  style={{
-                                    gridColumn: `${startIdx + 1} / span ${spanCols}`,
-                                    gridRow: laneIdx + 1,
-                                    pointerEvents: 'auto',
-                                    cursor: 'grab',
-                                    marginLeft: continuesLeft ? '0' : '6px',
-                                    marginRight: continuesRight ? '0' : '6px',
-                                    borderRadius: `${continuesLeft ? '0' : '6px'} ${continuesRight ? '0' : '6px'} ${continuesRight ? '0' : '6px'} ${continuesLeft ? '0' : '6px'}`,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    gap: '0.4rem',
-                                    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-                                    ...(isCompleted
-                                      ? {
-                                          background: '#ECFDF5',
-                                          color: '#047857',
-                                          border: '1px solid #A7F3D0',
-                                          textDecoration: 'line-through'
-                                        }
-                                      : {})
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedDateStr(clampedStart);
-                                    handleBookingClick(b);
-                                  }}
-                                  title={`Drag to reschedule · ${b.vehicleCode} · ${b.title} (${b.date} → Due ${endStr})`}
-                                >
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0, overflow: 'hidden' }}>
-                                    <span className="chip-dot" style={isCompleted ? { background: '#10B981' } : undefined} />
-                                    <span className="chip-text">
-                                      {continuesLeft ? '← ' : ''}{b.vehicleCode && b.vehicleCode !== 'NOTE' ? `${b.vehicleCode}: ` : ''}{b.title}
-                                    </span>
-                                  </span>
-                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, opacity: 0.85, flexShrink: 0 }}>
-                                    {continuesRight ? '→' : `Due ${endStr.slice(5)}`}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
                       </div>
                     );
                   })}
@@ -1537,24 +1468,26 @@ export const BookingsCalendar = () => {
                                       <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
                                         <Clock size={12} /> {b.startTime} - {b.endTime}
                                       </span>
-                                      <button
-                                        type="button"
-                                        className="btn btn-sm btn-outline"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          if (b.isComplianceRecord && v) {
-                                            setSelectedVehicle(v);
-                                            setModalType('vehicle-detail');
-                                          } else {
-                                            setSelectedBooking(b);
-                                            setModalType('edit-booking');
-                                          }
-                                        }}
-                                        style={{ padding: '0.15rem 0.5rem', fontSize: '0.74rem' }}
-                                        title={b.isComplianceRecord ? 'Edit dates in Vehicle Profile' : 'Edit schedule details'}
-                                      >
-                                        <Pencil size={11} /> Edit
-                                      </button>
+                                      {canEditCalendar && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm btn-outline"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (b.isComplianceRecord && v) {
+                                              setSelectedVehicle(v);
+                                              setModalType('vehicle-detail');
+                                            } else {
+                                              setSelectedBooking(b);
+                                              setModalType('edit-booking');
+                                            }
+                                          }}
+                                          style={{ padding: '0.15rem 0.5rem', fontSize: '0.74rem' }}
+                                          title={b.isComplianceRecord ? 'Edit dates in Vehicle Profile' : 'Edit schedule details'}
+                                        >
+                                          <Pencil size={11} /> Edit
+                                        </button>
+                                      )}
                                     </span>
                                   </div>
                                   <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-main)' }}>{b.title}</div>

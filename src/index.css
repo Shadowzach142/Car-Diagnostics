@@ -887,7 +887,13 @@ ul { list-style: none; }
   gap: 0.9rem;
 }
 
-.dash-panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.dash-grid.dash-grid-2x2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.1rem;
+}
+
+.dash-panel { position: relative; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .dash-panel.span-2 { grid-row: 1 / span 2; }
 
 .alert-list { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -0.4rem; padding: 0 0.4rem; }
@@ -2322,7 +2328,8 @@ html.high-contrast .calendar-title-text {
 
 @media (max-width: 960px) {
   .dashboard-single-screen { height: auto; }
-  .dash-grid { grid-template-columns: 1fr; grid-template-rows: none; }
+  .dash-grid,
+  .dash-grid.dash-grid-2x2 { grid-template-columns: 1fr; grid-template-rows: none; }
   .dash-panel.span-2 { grid-row: auto; max-height: 420px; }
   .dash-panel { min-height: 260px; }
   .map-layout { grid-template-columns: 1fr; }

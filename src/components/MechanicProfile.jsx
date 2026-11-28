@@ -512,11 +512,11 @@ export const MechanicProfile = () => {
         </div>
       </section>
 
-      {/* Ongoing Health of Assigned Cars */}
+      {/* Vehicle Health of Assigned Cars */}
       <section className="card dash-panel" aria-labelledby="mech-profile-health">
         <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <div>
-            <h3 className="card-title" id="mech-profile-health">Ongoing Health of My Cars</h3>
+            <h3 className="card-title" id="mech-profile-health">Vehicle Health of My Cars</h3>
             <div className="card-sub">{myVehicles.length} assigned / station vehicles tracked</div>
           </div>
         </div>

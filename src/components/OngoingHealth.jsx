@@ -237,24 +237,11 @@ export const OngoingHealth = () => {
   const q = (globalSearch || '').toLowerCase().trim();
 
   const isMechanic = settings?.currentRole === 'MECHANIC';
-  const mechNameNorm = (settings?.currentMechanic || '').split(' (')[0].trim().toLowerCase();
-  const matchedDriver = useMemo(
-    () => drivers.find(d => (d.name || '').trim().toLowerCase() === mechNameNorm),
-    [drivers, mechNameNorm]
-  );
+  const isDirector = settings?.currentRole === 'DIRECTOR';
+  const isReadOnly = !isDirector;
 
   const healthVehicles = useMemo(() => {
     return vehicles.filter(v => {
-      if (isMechanic) {
-        if (matchedDriver) {
-          if (!(v.authorizedDriverIds || []).includes(matchedDriver.id)) return false;
-        } else {
-          const hasOrder = workOrders.some(
-            wo => wo.vehicleCode === v.code && (wo.assignedMechanic || '').split(' (')[0].trim().toLowerCase() === mechNameNorm
-          );
-          if (!hasOrder) return false;
-        }
-      }
       if ((v.diagnostics || []).length === 0) return false;
       if (branchFilter !== 'ALL' && v.branchId !== branchFilter) return false;
       if (q) {
@@ -271,9 +258,10 @@ export const OngoingHealth = () => {
       }
       return true;
     });
-  }, [vehicles, isMechanic, matchedDriver, workOrders, mechNameNorm, branchFilter, q]);
+  }, [vehicles, branchFilter, q]);
 
   const openDiagnosticsModal = (v, initialDiag = null) => {
+    if (isReadOnly) return;
     setDiagModalVehicleId(v.id);
     const odo = Number(v.odometerKm) || 20000;
     if (initialDiag) {
@@ -331,6 +319,7 @@ export const OngoingHealth = () => {
   const maintModalVehicle = vehicles.find(v => v.id === maintModalVehicleId);
 
   const openSendToMaintenanceModal = (v) => {
+    if (isReadOnly) return;
     const odo = Number(v.odometerKm) || 0;
     const allDiags = v.diagnostics || [];
     const dueItems = allDiags
@@ -374,6 +363,7 @@ export const OngoingHealth = () => {
 
   const handleConfirmSendToMaintenance = (e) => {
     e.preventDefault();
+    if (isReadOnly) return;
     if (!maintModalVehicle) return;
 
     const v = maintModalVehicle;
@@ -423,6 +413,7 @@ export const OngoingHealth = () => {
 
   const handleSaveDiagnostic = (e) => {
     e.preventDefault();
+    if (isReadOnly) return;
     if (!diagModalVehicle || !editingDiag) return;
 
     const finalType = editingDiag.type === 'OTHER'
@@ -494,7 +485,7 @@ export const OngoingHealth = () => {
           Vehicles <strong>{healthVehicles.length}</strong>
         </span>
 
-        {!isMechanic && (
+        {isDirector && (
           <button
             type="button"
             className="btn btn-primary"
@@ -546,9 +537,18 @@ export const OngoingHealth = () => {
             });
             const isOverdueCard = allRowStatuses.some(s => s === 'OVERDUE');
             const isDue = allRowStatuses.some(s => s !== 'HEALTHY');
-            const activeWO = workOrders.find(
-              w => w.vehicleCode === v.code && w.status !== 'Completed / Released'
-            );
+            const mechShort = (settings?.currentMechanic || '').split(' (')[0].trim().toLowerCase();
+            const activeWO = workOrders.find(w => {
+              if (w.vehicleCode !== v.code) return false;
+              if (w.archivedFromBoard) return false;
+              if (w.status === 'Completed / Released' || w.currentStage === 'Completed / Released') return false;
+              if (isMechanic) {
+                const woMech = (w.assignedMechanic || '').split(' (')[0].trim().toLowerCase();
+                if (woMech !== mechShort) return false;
+              }
+              return true;
+            });
+            const isCurrentlyInMaintenance = Boolean(activeWO) && (v.status === 'IN-SHOP' || isOverdueCard || isDue);
 
             return (
               <div
@@ -693,10 +693,10 @@ export const OngoingHealth = () => {
                       return (
                         <div
                           key={d.id}
-                          role={isMechanic ? undefined : 'button'}
-                          tabIndex={isMechanic ? undefined : 0}
-                          onClick={isMechanic ? undefined : () => openDiagnosticsModal(v, d)}
-                          onKeyDown={isMechanic ? undefined : (e) => {
+                          role={isReadOnly ? undefined : 'button'}
+                          tabIndex={isReadOnly ? undefined : 0}
+                          onClick={isReadOnly ? undefined : () => openDiagnosticsModal(v, d)}
+                          onKeyDown={isReadOnly ? undefined : (e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();
                               openDiagnosticsModal(v, d);
@@ -706,12 +706,12 @@ export const OngoingHealth = () => {
                             padding: '0.2rem 0.35rem',
                             margin: '0 -0.35rem',
                             borderRadius: '6px',
-                            cursor: isMechanic ? 'default' : 'pointer',
+                            cursor: isReadOnly ? 'default' : 'pointer',
                             transition: 'background 0.15s ease'
                           }}
-                          onMouseEnter={isMechanic ? undefined : (e) => { e.currentTarget.style.background = 'var(--bg-surface-subtle)'; }}
-                          onMouseLeave={isMechanic ? undefined : (e) => { e.currentTarget.style.background = 'transparent'; }}
-                          title={isMechanic ? undefined : 'Click to edit KM or Date interval'}
+                          onMouseEnter={isReadOnly ? undefined : (e) => { e.currentTarget.style.background = 'var(--bg-surface-subtle)'; }}
+                          onMouseLeave={isReadOnly ? undefined : (e) => { e.currentTarget.style.background = 'transparent'; }}
+                          title={isReadOnly ? undefined : 'Click to edit KM or Date interval'}
                         >
                           {/* Top Row: Diagnostic Name & Remaining KM / Date Badge */}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.38rem' }}>
@@ -773,7 +773,7 @@ export const OngoingHealth = () => {
                     >
                       <Eye size={13} /> Profile
                     </button>
-                    {!isMechanic && (
+                    {isDirector && (
                       <button
                         type="button"
                         className="btn btn-sm btn-outline"
@@ -785,7 +785,7 @@ export const OngoingHealth = () => {
                       </button>
                     )}
                   </div>
-                  {activeWO ? (
+                  {isCurrentlyInMaintenance ? (
                     <button
                       type="button"
                       className="btn btn-sm btn-outline"
@@ -794,7 +794,7 @@ export const OngoingHealth = () => {
                     >
                       In Maintenance <ArrowRight size={13} />
                     </button>
-                  ) : !isMechanic ? (
+                  ) : isDirector ? (
                     <button
                       type="button"
                       className="btn btn-sm btn-primary"
@@ -812,13 +812,13 @@ export const OngoingHealth = () => {
       </div>
 
       {/* Modal: Edit / Add Vehicle Diagnostics & Intervals (By KM or Date) */}
-      {diagModalVehicle && editingDiag && (
+      {isDirector && diagModalVehicle && editingDiag && (
         <div className="modal-overlay" onClick={() => setDiagModalVehicleId(null)}>
           <div className="modal-box" style={{ maxWidth: '600px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-box-header">
               <div className="modal-box-title">
                 <Sliders size={18} color="var(--primary)" />
-                <span>Ongoing Health &amp; Intervals &bull; {diagModalVehicle.code}</span>
+                <span>Vehicle Health &amp; Intervals &bull; {diagModalVehicle.code}</span>
               </div>
               <button
                 type="button"
@@ -1177,7 +1177,7 @@ export const OngoingHealth = () => {
       )}
 
       {/* Modal: Send to Maintenance (Checklist + Who to Fix + Note) */}
-      {maintModalVehicle && (
+      {isDirector && maintModalVehicle && (
         <div className="modal-overlay" onClick={() => setMaintModalVehicleId(null)}>
           <div className="modal-box" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-box-header">
@@ -2023,7 +2023,7 @@ export const OngoingHealth = () => {
       })()}
 
       {/* Modal: Pick Existing Car from Car Profiling (or fallback to Register New Vehicle) */}
-      {addCarPickerOpen && (
+      {isDirector && addCarPickerOpen && (
         <div className="modal-overlay" onClick={() => setAddCarPickerOpen(false)}>
           <div className="modal-box" style={{ maxWidth: '580px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-box-header">
@@ -2087,7 +2087,7 @@ export const OngoingHealth = () => {
                         color: 'var(--text-secondary)',
                         fontSize: '0.84rem'
                       }}>
-                        All vehicles from <strong>Car Profiling</strong> are already in Ongoing Health.
+                        All vehicles from <strong>Car Profiling</strong> are already in Vehicle Health.
                       </div>
                     );
                   }

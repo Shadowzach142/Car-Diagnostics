@@ -23,7 +23,7 @@ const PAGE_META = {
   profiling: { title: 'Car Profiling', subtitle: 'Technical dossiers & specs' },
   drivers: { title: 'Employees', subtitle: 'Workforce roster & vehicle authorizations' },
   bookings: { title: 'Calendar', subtitle: 'Dispatches & timetable' },
-  health: { title: 'Ongoing Health', subtitle: 'Change oil intervals, mileage countdowns & vehicle diagnostics' },
+  health: { title: 'Vehicle Health', subtitle: 'Change oil intervals, mileage countdowns & vehicle diagnostics' },
   maintenance: { title: 'Maintenance', subtitle: 'Active maintenance steps, completed service & assigned technicians' },
   auditing: { title: 'Reports', subtitle: 'Current month vehicle & driver service reports' },
   archive: { title: 'Archive', subtitle: 'Monthly categorized reports, maintenance history, driver dispatches & registration renewals' },

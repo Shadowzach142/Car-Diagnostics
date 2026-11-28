@@ -883,7 +883,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const createWorkOrder = (woData) => {
-    if (!checkPermission(['DIRECTOR', 'DISPATCHER', 'MAINTENANCE'], 'Create Work Order')) return false;
+    if (!checkPermission(['DIRECTOR'], 'Create Work Order')) return false;
 
     const woId = `REP-2026-${String(workOrders.length + 95).padStart(3, '0')}`;
     const initialStage = woData.currentStage || 'Queued / Inspection';
@@ -1328,7 +1328,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const upsertVehicleDiagnostic = (vehicleId, diagItem) => {
-    if (!checkPermission(['DIRECTOR', 'DISPATCHER', 'MAINTENANCE'], 'Update Vehicle Diagnostics')) return false;
+    if (!checkPermission(['DIRECTOR'], 'Update Vehicle Diagnostics')) return false;
 
     setVehicles(prev => prev.map(v => {
       if (v.id !== vehicleId && v.code !== vehicleId) return v;
@@ -1371,7 +1371,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const removeVehicleDiagnostic = (vehicleId, diagId) => {
-    if (!checkPermission(['DIRECTOR', 'DISPATCHER', 'MAINTENANCE'], 'Remove Vehicle Diagnostic')) return false;
+    if (!checkPermission(['DIRECTOR'], 'Remove Vehicle Diagnostic')) return false;
     setVehicles(prev => prev.map(v => {
       if (v.id !== vehicleId && v.code !== vehicleId) return v;
       return {
@@ -1578,6 +1578,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const updateIncidentReportStatus = (incidentId, status) => {
+    if (!checkPermission(['DIRECTOR'], 'Update Incident Report Status')) return false;
     setIncidentReports(prev =>
       prev.map(inc => (inc.id === incidentId ? { ...inc, status } : inc))
     );
@@ -1585,6 +1586,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const deleteIncidentReport = (incidentId) => {
+    if (!checkPermission(['DIRECTOR'], 'Delete Incident Report')) return false;
     setIncidentReports(prev => prev.filter(inc => inc.id !== incidentId));
     logAuditEvent('Incident Report Removed', 'INCIDENT_REPORT', `Removed incident report ${incidentId}.`);
   };
@@ -1656,6 +1658,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const updateVehicle = (id, updates) => {
+    if (!checkPermission(['DIRECTOR'], 'Update Vehicle Profile')) return false;
     let targetVeh = null;
     setVehicles(prev => prev.map(v => {
       if (v.id === id) {
@@ -1785,6 +1788,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const grantVehicleAccess = (vehicleId, driverId) => {
+    if (!checkPermission(['DIRECTOR'], 'Grant Vehicle Access')) return false;
     setVehicles(prev => prev.map(v =>
       (v.id === vehicleId || v.code === vehicleId) ? applyDriverAccessChange(v, driverId, 'grant') : v
     ));
@@ -1795,6 +1799,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const revokeVehicleAccess = (vehicleId, driverId) => {
+    if (!checkPermission(['DIRECTOR'], 'Revoke Vehicle Access')) return false;
     setVehicles(prev => prev.map(v =>
       (v.id === vehicleId || v.code === vehicleId) ? applyDriverAccessChange(v, driverId, 'revoke') : v
     ));
@@ -1805,6 +1810,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const toggleVehicleAccess = (vehicleId, driverId) => {
+    if (!checkPermission(['DIRECTOR'], 'Modify Vehicle Access')) return false;
     setVehicles(prev => prev.map(v =>
       (v.id === vehicleId || v.code === vehicleId) ? applyDriverAccessChange(v, driverId, 'toggle') : v
     ));
@@ -1816,6 +1822,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const addBooking = (newBooking) => {
+    if (!checkPermission(['DIRECTOR', 'MECHANIC'], 'Add Calendar Schedule')) return false;
     const isMechActor = settings.currentRole === 'MECHANIC';
     const actorName = isMechActor
       ? (settings.currentMechanic || 'Assigned Mechanic').split(' (')[0].trim()
@@ -1861,6 +1868,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const updateBooking = (id, updates) => {
+    if (!checkPermission(['DIRECTOR', 'MECHANIC'], 'Update Calendar Schedule')) return false;
     const existing = bookings.find(b => b.id === id);
     const isMechActor = settings.currentRole === 'MECHANIC';
     const actorName = isMechActor
@@ -1916,6 +1924,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const deleteBooking = (id) => {
+    if (!checkPermission(['DIRECTOR', 'MECHANIC'], 'Cancel Calendar Schedule')) return false;
     const item = bookings.find(b => b.id === id);
     const isMechActor = settings.currentRole === 'MECHANIC';
     const actorName = isMechActor
@@ -2050,6 +2059,7 @@ export const FleetProvider = ({ children }) => {
   };
 
   const reassignDriverVehicle = (driverId, newVehicleCode) => {
+    if (!checkPermission(['DIRECTOR'], 'Reassign Driver Vehicle')) return false;
     const d = drivers.find(item => item.id === driverId);
     if (!d) return false;
     updateDriver(driverId, { assignedVehicleCode: newVehicleCode });

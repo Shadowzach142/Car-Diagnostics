@@ -79,7 +79,7 @@ export const Sidebar = () => {
     { id: 'profiling', label: 'Car Profiling', icon: Car, badge: unresolvedDocsCount },
     { id: 'drivers', label: 'Employees', icon: Users, badge: unresolvedLicensesCount },
     { id: 'bookings', label: 'Calendar', icon: CalendarDays, badge: isDriver ? driverCalendarCount : activeBookingsCount },
-    { id: 'health', label: 'Ongoing Health', icon: Activity },
+    { id: 'health', label: 'Vehicle Health', icon: Activity },
     { id: 'maintenance', label: 'Maintenance', icon: Wrench, badge: openOrders },
     { id: 'auditing', label: 'Reports', icon: FileText },
     { id: 'archive', label: 'Archive', icon: FolderArchive },

@@ -103,6 +103,7 @@ export const VehicleDetailModal = () => {
     settings,
     selectedVehicle,
     vehicles = [],
+    driverVehicles = [],
     modalType,
     setModalType,
     setSelectedVehicle,
@@ -117,6 +118,9 @@ export const VehicleDetailModal = () => {
     revokeVehicleAccess
   } = useFleet();
   const isMechanic = settings?.currentRole === 'MECHANIC';
+  const isDriver = settings?.currentRole === 'DRIVER';
+  const isDirector = settings?.currentRole === 'DIRECTOR';
+  const isReadOnly = !isDirector;
 
   const vehicleClassifications = editables.vehicleClassifications || [
     'Bucket Truck',
@@ -428,6 +432,9 @@ export const VehicleDetailModal = () => {
   );
 
   if (modalType !== 'vehicle-detail' || !vehicle) return null;
+  if (isDriver && !driverVehicles.some(dv => dv.id === vehicle.id || dv.code === vehicle.code)) {
+    return null;
+  }
 
   const branch = branches.find(b => b.id === (formState.branchId || vehicle.branchId));
   const vehiclePhoto = getVehicleImage(vehicle);
@@ -440,6 +447,7 @@ export const VehicleDetailModal = () => {
   };
 
   const handlePhotoUpload = (e) => {
+    if (isReadOnly) return;
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -469,6 +477,7 @@ export const VehicleDetailModal = () => {
   };
 
   const handleSave = () => {
+    if (isReadOnly) return;
     updateVehicle(vehicle.id, {
       image: formState.imageUrl || undefined,
       imageUrl: formState.imageUrl || undefined,
@@ -564,7 +573,7 @@ export const VehicleDetailModal = () => {
     { id: 'drivers', label: 'Driver History' },
     { id: 'maintenance', label: 'Maintenance' },
     { id: 'paperwork', label: 'Paperwork & Registration' },
-    ...(!isMechanic ? [{ id: 'archive', label: `Archive (${archiveMonthGroups.length})` }] : [])
+    ...(isDirector ? [{ id: 'archive', label: `Archive (${archiveMonthGroups.length})` }] : [])
   ];
 
   return (
@@ -767,7 +776,16 @@ export const VehicleDetailModal = () => {
 
             {/* Top-Right Schedule, Edit & Close Actions */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap' }}>
-              {!isEditing && (
+              {isReadOnly && (
+                <span
+                  className="badge badge-muted"
+                  style={{ fontSize: '0.7rem', fontWeight: 700 }}
+                  title="Vehicle specifications and paperwork are read-only for your role"
+                >
+                  Read-Only View
+                </span>
+              )}
+              {!isEditing && isDirector && (
                 <button
                   type="button"
                   className="btn btn-sm btn-primary"
@@ -784,7 +802,7 @@ export const VehicleDetailModal = () => {
                   <Plus size={14} /> Add Schedule
                 </button>
               )}
-              {isEditing ? (
+              {isEditing && isDirector ? (
                 <>
                   <button
                     type="button"
@@ -801,7 +819,7 @@ export const VehicleDetailModal = () => {
                     <Check size={14} /> Save Specs
                   </button>
                 </>
-              ) : !isMechanic ? (
+              ) : isDirector ? (
                 <button
                   type="button"
                   className="btn btn-sm btn-outline"
@@ -981,13 +999,15 @@ export const VehicleDetailModal = () => {
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
                     <Users size={13} /> CURRENTLY AUTHORIZED DRIVERS ({authorizedDrivers.length})
                   </span>
-                  <button
-                    type="button"
-                    className="btn btn-xs btn-primary"
-                    onClick={() => setModalType('vehicle-access')}
-                  >
-                    <Plus size={12} /> Manage Access
-                  </button>
+                  {isDirector && (
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-primary"
+                      onClick={() => setModalType('vehicle-access')}
+                    >
+                      <Plus size={12} /> Manage Access
+                    </button>
+                  )}
                 </div>
 
                 {authorizedDrivers.length === 0 ? (
@@ -1036,14 +1056,16 @@ export const VehicleDetailModal = () => {
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexShrink: 0 }}>
                           <span className="badge badge-ok">Authorized</span>
-                          <button
-                            type="button"
-                            className="btn btn-xs btn-outline"
-                            onClick={() => revokeVehicleAccess(vehicle.id, d.id)}
-                            title="Revoke current access (moves to past history)"
-                          >
-                            Revoke
-                          </button>
+                          {isDirector && (
+                            <button
+                              type="button"
+                              className="btn btn-xs btn-outline"
+                              onClick={() => revokeVehicleAccess(vehicle.id, d.id)}
+                              title="Revoke current access (moves to past history)"
+                            >
+                              Revoke
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1186,7 +1208,7 @@ export const VehicleDetailModal = () => {
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
                     <FileText size={13} /> CURRENT PAPERWORK &amp; REGISTRATION VALIDITY
                   </span>
-                  {!isEditing && (
+                  {!isEditing && isDirector && (
                     <button
                       type="button"
                       className="btn btn-xs btn-outline"

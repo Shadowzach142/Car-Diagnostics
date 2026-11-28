@@ -63,9 +63,9 @@ export const BookingDetailModal = () => {
         purpose: selectedBooking.purpose || '',
         status: selectedBooking.status || 'Scheduled'
       });
-      setIsEditing(modalType === 'edit-booking');
+      setIsEditing(!isDriverView && modalType === 'edit-booking');
     }
-  }, [selectedBooking, modalType]);
+  }, [selectedBooking, modalType, isDriverView]);
 
   if ((modalType !== 'booking-detail' && modalType !== 'edit-booking') || !selectedBooking) return null;
 

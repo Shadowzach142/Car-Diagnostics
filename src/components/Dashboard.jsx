@@ -310,9 +310,9 @@ export const Dashboard = () => {
         </div>
 
         {/* Generalized 2x2 At-a-Glance Overview (Everything visible immediately, no tab clicks needed) */}
-        <div className="dash-grid">
+        <div className="dash-grid dash-grid-2x2">
           {/* Panel 1: Active Maintenance Queue (For Maintenance + Under Maintenance) */}
-          <section className="card dash-panel span-2" aria-labelledby="mech-queue-title">
+          <section className="card dash-panel" aria-labelledby="mech-queue-title">
             <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               <div>
                 <h2 className="card-title" id="mech-queue-title">Maintenance Queue</h2>
@@ -411,7 +411,7 @@ export const Dashboard = () => {
           </section>
 
           {/* Panel 2: Upcoming Calendar Schedules */}
-          <section className="card dash-panel span-2" aria-labelledby="mech-sched-title">
+          <section className="card dash-panel" aria-labelledby="mech-sched-title">
             <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               <div>
                 <h2 className="card-title" id="mech-sched-title">Upcoming Schedules</h2>
@@ -457,11 +457,11 @@ export const Dashboard = () => {
             </div>
           </section>
 
-          {/* Panel 3: Ongoing Health Overview */}
-          <section className="card dash-panel span-2" aria-labelledby="mech-health-title">
+          {/* Panel 3: Vehicle Health Overview */}
+          <section className="card dash-panel" aria-labelledby="mech-health-title">
             <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               <div>
-                <h2 className="card-title" id="mech-health-title">Ongoing Vehicle Health</h2>
+                <h2 className="card-title" id="mech-health-title">Vehicle Health</h2>
                 <div className="card-sub">Oil, brakes, tires &amp; safety diagnostic countdowns</div>
               </div>
               <button
@@ -518,7 +518,7 @@ export const Dashboard = () => {
           </section>
 
           {/* Panel 4: Done & Recent Reports (This Month) */}
-          <section className="card dash-panel span-2" aria-labelledby="mech-done-title">
+          <section className="card dash-panel" aria-labelledby="mech-done-title">
             <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               <div>
                 <h2 className="card-title" id="mech-done-title">Done &amp; Recent Reports</h2>
@@ -768,7 +768,7 @@ export const Dashboard = () => {
               setActiveTab('health');
             }}
           >
-            <Activity size={14} /> Ongoing Health
+            <Activity size={14} /> Vehicle Health
           </button>
           <button
             type="button"
@@ -796,7 +796,7 @@ export const Dashboard = () => {
         <Kpi
           icon={Activity}
           tone={overdueHealthCount > 0 ? 'bad' : dueSoonHealthCount > 0 ? 'warn' : 'ok'}
-          label="Ongoing health alerts"
+          label="Vehicle health alerts"
           value={overdueHealthCount + dueSoonHealthCount}
           note={`${overdueHealthCount} overdue · ${dueSoonHealthCount} due soon`}
           onClick={() => {
@@ -855,7 +855,7 @@ export const Dashboard = () => {
             <div>
               <h2 className="card-title" id="alerts-title">
                 {leftTab === 'attention'
-                  ? 'Needs attention & ongoing health'
+                  ? 'Needs attention & vehicle health'
                   : leftTab === 'maintenance'
                   ? 'Active maintenance pipeline'
                   : 'Document & Driver License Expiry Alerts'}
@@ -1017,7 +1017,7 @@ export const Dashboard = () => {
                             if (setFocusedHealthVehicleId) setFocusedHealthVehicleId(v.id);
                             setActiveTab('health');
                           }}
-                          title={`Open Ongoing Health for ${v.code}`}
+                          title={`Open Vehicle Health for ${v.code}`}
                         >
                           <Activity size={13} /> Health
                         </button>
