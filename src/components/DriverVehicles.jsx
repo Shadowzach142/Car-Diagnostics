@@ -48,33 +48,76 @@ export const DriverVehicles = () => {
       {list.length === 0 ? (
         <div className="card"><div className="empty-state">No vehicles to show.</div></div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 330px), 1fr))', gap: '0.9rem', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '0.9rem', alignItems: 'stretch' }}>
           {list.map(v => {
             const a = getVehicleAvailability(v, bookings);
             const upcoming = getUpcomingBookings(v, bookings, 3);
             const branch = branches.find(b => b.id === v.branchId);
             return (
-              <div key={v.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <img src={getVehicleImage(v)} alt={v.code} style={{ width: '100%', height: 150, objectFit: 'cover', display: 'block', borderBottom: '1px solid var(--border-subtle)' }} />
-                <div style={{ padding: '0.9rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+              <div key={v.id} className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <img src={getVehicleImage(v)} alt={v.code} style={{ width: '100%', height: 150, objectFit: 'cover', display: 'block', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }} />
+                <div style={{ padding: '0.9rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.7rem', flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'flex-start' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 800, fontSize: '0.98rem', color: 'var(--text-main)' }}>{v.code} <span className="mono" style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem' }}>· {v.plateNo}</span></div>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{v.makeModel} · {v.year}</div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.98rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {v.code} <span className="mono" style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem' }}>· {v.plateNo}</span>
+                      </div>
+                      <div
+                        title={`${v.makeModel} · ${v.year}`}
+                        style={{
+                          fontSize: '0.78rem',
+                          color: 'var(--text-secondary)',
+                          lineHeight: 1.4,
+                          minHeight: '2.8em',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {v.makeModel} · {v.year}
+                      </div>
                     </div>
-                    <span className={`badge badge-${a.tone}`}>{a.label}</span>
+                    <span className={`badge badge-${a.tone}`} style={{ flexShrink: 0 }}>{a.label}</span>
                   </div>
 
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{a.detail}</div>
+                  <div
+                    title={a.detail}
+                    style={{
+                      fontSize: '0.78rem',
+                      color: 'var(--text-secondary)',
+                      lineHeight: 1.4,
+                      minHeight: '2.8em',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {a.detail}
+                  </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
-                    <div style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-light)', borderRadius: 8, padding: '0.5rem 0.65rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.5rem', alignItems: 'stretch' }}>
+                    <div style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-light)', borderRadius: 8, padding: '0.5rem 0.65rem', minHeight: '68px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                       <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Odometer</div>
                       <div style={{ fontWeight: 800, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}><Gauge size={13} /> {(v.odometerKm || 0).toLocaleString()} km</div>
                     </div>
-                    <div style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-light)', borderRadius: 8, padding: '0.5rem 0.65rem' }}>
+                    <div style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-light)', borderRadius: 8, padding: '0.5rem 0.65rem', minHeight: '68px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                       <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Station</div>
-                      <div style={{ fontWeight: 700, fontSize: '0.84rem' }}>{branch?.municipality || '—'}</div>
+                      <div
+                        title={branch?.municipality || '—'}
+                        style={{
+                          fontWeight: 700,
+                          fontSize: '0.84rem',
+                          lineHeight: 1.25,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {branch?.municipality || '—'}
+                      </div>
                     </div>
                   </div>
 
@@ -83,20 +126,34 @@ export const DriverVehicles = () => {
                     {docPill('LTO registration', v.registrationExpiryDate)}
                   </div>
 
-                  <div>
+                  <div style={{ minHeight: '4.1rem', display: 'flex', flexDirection: 'column' }}>
                     <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem' }}>Next schedules</div>
                     {upcoming.length === 0 ? (
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No upcoming schedules.</div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.4, minHeight: '2.8em' }}>No upcoming schedules.</div>
                     ) : (
-                      upcoming.map(b => (
-                        <div key={b.id} style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', padding: '0.15rem 0' }}>
-                          <strong style={{ color: 'var(--text-main)' }}>{formatDate(b.date)}</strong> · {b.title}
-                        </div>
-                      ))
+                      <div
+                        title={upcoming.map(b => `${formatDate(b.date)} · ${b.title}`).join('\n')}
+                        style={{
+                          fontSize: '0.78rem',
+                          color: 'var(--text-secondary)',
+                          lineHeight: 1.4,
+                          minHeight: '2.8em',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {upcoming.map(b => (
+                          <div key={b.id} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <strong style={{ color: 'var(--text-main)' }}>{formatDate(b.date)}</strong> · {b.title}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', paddingTop: '0.35rem' }}>
                     <button
                       type="button"
                       className="btn btn-sm btn-primary"
