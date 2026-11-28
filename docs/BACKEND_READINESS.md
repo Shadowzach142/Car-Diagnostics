@@ -77,6 +77,11 @@ These are things that work today only because everything runs in one browser. Ve
 - **Base path:** `/api/v1`. In dev, Vite proxies `/api` to the Express port (no CORS needed in dev).
 - **Concurrency:** `WorkOrders` and `Bookings` carry a `ROWVERSION`. Drag-and-drop rescheduling and two people editing the same job must send/receive an `ETag` / `If-Match` and get `409` on conflict.
 - **SQL safety:** every statement parametrized (`request.input(...)`); no string-built SQL; no `SELECT *`.
+- **Express security & middleware controls (`server/src/app.js` & `middleware/`):**
+  - **Rate limiting (`express-rate-limit`):** enforce strict rate limits on authentication endpoints (`/api/v1/auth/login`, `/api/v1/auth/refresh`) and write/mutation routes (`POST`, `PUT`, `PATCH`, `DELETE`) to mitigate brute-force and abuse.
+  - **JSON body size cap:** configure `express.json({ limit: '100kb' })` so oversized JSON payloads cannot exhaust server memory.
+  - **File upload size cap:** configure `multer({ limits: { fileSize: 10 * 1024 * 1024 } })` (10 MB ceiling) alongside server-side MIME/magic-byte verification for attachment uploads.
+  - **Refresh cookie hardening & CSRF protection:** issue refresh token cookies with `SameSite=Strict; HttpOnly; Secure` (`Path=/api/v1/auth/refresh`) and enforce CSRF protection (Origin/Referer validation or custom header / CSRF token check) on `/api/v1/auth/refresh`.
 
 ---
 
