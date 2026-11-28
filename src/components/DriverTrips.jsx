@@ -35,7 +35,11 @@ export const DriverTrips = () => {
   const totalKm = sumKm(rows);
 
   const exportCsv = () => {
-    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const esc = (v) => {
+      const raw = String(v ?? '');
+      const safe = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
     const header = ['Trip ID', 'Date', 'Vehicle', 'Plate', 'Route', 'Round trip', 'Distance (km)', 'Notes'];
     const body = rows.map(t => [t.id, t.date, t.vehicleCode, t.plateNo, tripRouteLabel(t), t.roundTrip ? 'Yes' : 'No', t.distanceKm, t.notes].map(esc).join(','));
     const blob = new Blob([[header.join(','), ...body].join('\n')], { type: 'text/csv;charset=utf-8;' });

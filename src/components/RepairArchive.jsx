@@ -109,7 +109,11 @@ export const RepairArchive = () => {
       'Notes',
       'Attachment'
     ];
-    const escapeCsv = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    const escapeCsv = (val) => {
+      const raw = String(val ?? '');
+      const safe = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
     const csvRows = [
       headers.join(','),
       ...currentMonthRows.map((r) =>
