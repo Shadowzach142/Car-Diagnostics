@@ -62,10 +62,10 @@ COTELCO/
 | `activeTab` | Component | Sidebar Label | Roles |
 |---|---|---|---|
 | `dashboard` | `Dashboard` | Dashboard | `DIRECTOR`, `MECHANIC` |
-| `profiling` | `VehicleProfiling` | Car Profiling | `DIRECTOR`, `MECHANIC` (scoped) |
+| `profiling` | `VehicleProfiling` | Car Profiling | `DIRECTOR`, `MECHANIC` (read-only, all fleet vehicles) |
 | `drivers` | `DriverRoster` | Employees | `DIRECTOR` |
 | `bookings` | `BookingsCalendar` | Calendar | `DIRECTOR`, `MECHANIC` (scoped) |
-| `health` | `OngoingHealth` | Ongoing Health | `DIRECTOR`, `MECHANIC` (read-only, scoped) |
+| `health` | `OngoingHealth` | Vehicle Health | `DIRECTOR`, `MECHANIC` (read-only, all fleet vehicles) |
 | `maintenance` | `MaintenanceHub` | Maintenance | `DIRECTOR`, `MECHANIC` (scoped) |
 | `auditing` | `RepairArchive` | Reports | `DIRECTOR`, `MECHANIC` (scoped) |
 | `archive` | `ArchiveHub` | Archive | `DIRECTOR` |
@@ -105,11 +105,11 @@ COTELCO/
 - **Calendar (`BookingsCalendar.jsx`)**:
   - Supports both `DIRECTOR` and `MECHANIC` scheduling (`+ Add Schedule` / `Add Calendar Note`), full drag-and-drop rescheduling in Month & Week views (preserving multi-day `date → deadline` spans), mechanic-to-director `SCHEDULE` diff notifications, and an **`Expiry Dates Only`** red-highlighted filter toggle for Insurance, LTO, and Driver's License expirations.
 - **Ongoing Health (`OngoingHealth.jsx`) & Maintenance (`MaintenanceHub.jsx`)**:
-  - **Ongoing Health**: Displays each vehicle in a clean 2-box card (`CHANGE OIL` and secondary diagnostic) showing remaining km / target date and assigned specialist. For `DIRECTOR`, clicking a box or `Edit Diagnostics` configures intervals by **Odometer (`KM`)**, **Calendar (`DATE`)**, or **Both (`BOTH`)** (`upsertVehicleDiagnostic`, `removeVehicleDiagnostic`). For `MECHANIC`, Ongoing Health is read-only and scoped to their assigned vehicles (no `Edit Diagnostics` or `To Maintenance` buttons).
+  - **Ongoing Health (Vehicle Health)**: Displays each vehicle in a clean 2-box card (`CHANGE OIL` and secondary diagnostic) showing remaining km / target date and assigned specialist. For `DIRECTOR`, clicking a box or `Edit Diagnostics` configures intervals by **Odometer (`KM`)**, **Calendar (`DATE`)**, or **Both (`BOTH`)** (`upsertVehicleDiagnostic`, `removeVehicleDiagnostic`). For `MECHANIC`, Vehicle Health is read-only across all fleet vehicles (no `Edit Diagnostics` or `To Maintenance` buttons).
   - **Maintenance**: 3-column Kanban (`For Maintenance` → `Under Maintenance` → `Done`) supporting Scheduled vs. Unscheduled orders, a slide-over detail drawer (`Next Service Interval` shown in the mechanic drawer only when `Done`), and **Additional Work / Parts Replaced** (quick-tap chips + custom items) that sync matching diagnostic resets back to Ongoing Health and append to Reports.
   - **Add Car to Maintenance (`NewWorkOrderModal.jsx`)**: Category-filtered task dropdown (`serviceTasksByCategory[category]`) plus an `Other` custom input option, `PersonnelPickerField` specialist selector, `DateRangeCalendarField` schedule picker, and next interval setting (KM / Date) without financial clutter.
 - **Reports (`RepairArchive.jsx` & `AddLedgerModal.jsx`), Archive (`ArchiveHub.jsx`), & Mechanic Profile (`MechanicProfile.jsx`)**:
-  - **Reports**: Current-month outside shop and in-house motorpool service/repair reports with photo attachments (`MECHANIC` scoped to own reports/assigned vehicles).
+  - **Reports**: Current-month outside shop and in-house motorpool service/repair reports with photo attachments (`MECHANIC` scoped to own reports/assigned work orders).
   - **Archive (`DIRECTOR`)**: Categorized monthly folders (`Reports Archive`, `Maintenance History`, `Driver History`, `Paperwork History`).
   - **My Profile (`MECHANIC`)**: Clean header with `Edit Profile` only (no tab redirects), Driver's License tracking card + edit fields (`updateMechanicProfile`), current-month `Recent Reports`, and a **`My Archive`** tab organizing the mechanic's own reports and maintenance history by month.
 
@@ -415,7 +415,7 @@ When the company instructs the team to integrate with **Express.js + Microsoft S
   4. **`Paperwork & Registration`**: Active insurance and LTO OR/CR validity cards (editable via `Update / Log Renewal`) plus multi-year Registration & Insurance Renewal History.
 - **2-Role System (`DIRECTOR` vs. `MECHANIC`)**:
   - **Operations Director (`DIRECTOR`)**: Full access across all operational tabs (`dashboard`, `profiling`, `drivers`, `bookings`, `health`, `maintenance`, `auditing`, `archive`, `editables`). Cannot mark a maintenance work order as `Done` directly (clicking `Done` prompts to switch to the assigned mechanic).
-  - **Assigned Mechanic (`MECHANIC`)**: Strictly scoped to their own **Dashboard** (4-panel all-at-once overview covering Maintenance Queue, Upcoming Schedules, Ongoing Vehicle Health, and Done & Recent Reports), **Car Profiling** (assigned vehicles only), **Calendar** (their schedules, with `+ Add Schedule` notifying the Director), **Ongoing Health** (read-only view of their assigned vehicles — no edit or send-to-maintenance actions), **Maintenance** (their assigned work orders, with Additional Work tracking and Next Service Interval on Done orders), **Reports** (their own current-month reports and assigned vehicles), and **My Profile** (`profile`, with `Edit Profile`, Driver's License tracking, and `My Archive` monthly folders). Only internal employees appear in assigned mechanic lists.
+  - **Assigned Mechanic (`MECHANIC`)**: Strictly scoped to their own **Dashboard** (4-panel all-at-once overview covering Maintenance Queue, Upcoming Schedules, Vehicle Health, and Done & Recent Reports), **Car Profiling** (read-only access to all fleet vehicles), **Calendar** (their schedules, with `+ Add Schedule` notifying the Director), **Ongoing Health / Vehicle Health** (read-only access to all fleet vehicles — no edit or send-to-maintenance actions), **Maintenance** (their assigned work orders, with Additional Work tracking and Next Service Interval on Done orders), **Reports** (their own current-month reports and assigned work orders), and **My Profile** (`profile`, with `Edit Profile`, Driver's License tracking, and `My Archive` monthly folders). Only internal employees appear in assigned mechanic lists.
   - **Authorized Driver (`DRIVER`)**: Strictly scoped to **Dashboard** (own trips/km, authorized-vehicle availability, license status, **Log a Trip** / **Repeat last trip**), **Car Profiling** (only vehicles they are authorized to drive, read-only), **Calendar** (read-only availability of their authorized vehicles + their own license expiry), **Reports** (their own trip logs), and **My Profile** (own details + license; may edit only own phone/email). No access to Employees, Ongoing Health, Maintenance, Archive, or Editables. Drivers never see other employees' data.
 
 ---
