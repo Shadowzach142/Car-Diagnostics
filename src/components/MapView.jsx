@@ -18,6 +18,14 @@ import 'leaflet/dist/leaflet.css';
 
 const COLORS = { ACTIVE: '#16A34A', 'IN-SHOP': '#D97706', OFFLINE: '#DC2626' };
 
+const escapeHtml = (str) =>
+  String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const TILE_PROVIDERS = {
   osm: {
     name: 'OpenStreetMap',
@@ -139,7 +147,7 @@ export const MapView = () => {
             ${b.isHQ ? 'HQ' : count}
           </div>
           <div class="branch-label">
-            ${b.municipality.replace(' District', '').replace(' Sector', '')}
+            ${escapeHtml(String(b.municipality ?? '').replace(' District', '').replace(' Sector', ''))}
           </div>
         </div>
       `;
@@ -172,7 +180,7 @@ export const MapView = () => {
       const html = `
         <div class="vehicle-pin ${isSelected ? 'selected' : ''}">
           <div class="vehicle-dot" style="background-color: ${color};"></div>
-          ${isSelected ? `<div class="vehicle-tag">${v.code}</div>` : ''}
+          ${isSelected ? `<div class="vehicle-tag">${escapeHtml(v.code)}</div>` : ''}
         </div>
       `;
 
@@ -190,9 +198,9 @@ export const MapView = () => {
 
       const popupHtml = `
         <div class="map-popup-content">
-          <div class="map-popup-title">${v.code} · ${v.plateNo}</div>
-          <div class="map-popup-sub">${v.makeModel}</div>
-          <button type="button" class="map-popup-btn" id="pop-inspect-${v.id}">Inspect Vehicle</button>
+          <div class="map-popup-title">${escapeHtml(v.code)} · ${escapeHtml(v.plateNo)}</div>
+          <div class="map-popup-sub">${escapeHtml(v.makeModel)}</div>
+          <button type="button" class="map-popup-btn" id="pop-inspect-${escapeHtml(v.id)}">Inspect Vehicle</button>
         </div>
       `;
 
@@ -206,7 +214,7 @@ export const MapView = () => {
       });
 
       marker.on('popupopen', () => {
-        const btn = document.getElementById(`pop-inspect-${v.id}`);
+        const btn = document.getElementById(`pop-inspect-${escapeHtml(v.id)}`);
         if (btn) {
           btn.onclick = () => {
             setSelectedVehicle(v);
