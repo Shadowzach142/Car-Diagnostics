@@ -96,6 +96,33 @@ const generalizeClassification = (c) => {
   return c;
 };
 
+const csprngDigits = (digits = 5) => {
+  const min = Math.pow(10, digits - 1);
+  const span = Math.pow(10, digits) - min;
+  const arr = new Uint32Array(1);
+  crypto.getRandomValues(arr);
+  return String(min + (arr[0] % span));
+};
+
+const nextSequentialId = (prefix, padLen, items = [], startOffset = 1) => {
+  const used = new Set(items.map(item => String(item?.id || '')));
+  let maxNum = items.length + startOffset - 1;
+  items.forEach(item => {
+    const rawId = String(item?.id || '');
+    if (rawId.startsWith(prefix)) {
+      const n = parseInt(rawId.slice(prefix.length), 10);
+      if (!Number.isNaN(n) && n > maxNum) maxNum = n;
+    }
+  });
+  let nextNum = maxNum + 1;
+  let candidate = `${prefix}${String(nextNum).padStart(padLen, '0')}`;
+  while (used.has(candidate)) {
+    nextNum += 1;
+    candidate = `${prefix}${String(nextNum).padStart(padLen, '0')}`;
+  }
+  return candidate;
+};
+
 export const FleetProvider = ({ children }) => {
   // 1. Initial State from localStorage or Defaults
   const [editables, setEditables] = useState(() => {
@@ -425,7 +452,7 @@ export const FleetProvider = ({ children }) => {
   }) => {
     if (!title) return null;
     const notif = {
-      id: `NOTIF-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      id: `NOTIF-${Date.now()}-${csprngDigits(3)}`,
       type,
       severity,
       title,
@@ -872,7 +899,7 @@ export const FleetProvider = ({ children }) => {
     };
 
     const newLog = {
-      id: `LOG-${Math.floor(10000 + Math.random() * 90000)}`,
+      id: `LOG-${csprngDigits(5)}`,
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
       user: roleTitles[settings.currentRole]?.split(' (')[1]?.replace(')', '') || 'Authorized Staff',
       role: roleTitles[settings.currentRole]?.split(' (')[0] || settings.currentRole,
@@ -919,7 +946,7 @@ export const FleetProvider = ({ children }) => {
   const createWorkOrder = (woData) => {
     if (!checkPermission(['DIRECTOR'], 'Create Work Order')) return false;
 
-    const woId = `REP-2026-${String(workOrders.length + 95).padStart(3, '0')}`;
+    const woId = nextSequentialId('REP-2026-', 3, workOrders, 95);
     const initialStage = woData.currentStage || 'Queued / Inspection';
     const rawChecklist = Array.isArray(woData.checklist) && woData.checklist.length > 0
       ? woData.checklist
@@ -1226,8 +1253,8 @@ export const FleetProvider = ({ children }) => {
               : r
           ));
         }
-        const voucherNo = `VCH-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-        const receiptId = `RCPT-${Math.floor(100000 + Math.random() * 900000)}`;
+        const voucherNo = `VCH-2026-${csprngDigits(5)}`;
+        const receiptId = `RCPT-${csprngDigits(6)}`;
         return [
           {
             id: voucherNo,
@@ -1299,8 +1326,8 @@ export const FleetProvider = ({ children }) => {
 
     setRepairArchive(prev => {
       if (prev.some(r => r.woNo === woId)) return prev;
-      const voucherNo = `VCH-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-      const receiptId = `RCPT-${Math.floor(100000 + Math.random() * 900000)}`;
+      const voucherNo = `VCH-2026-${csprngDigits(5)}`;
+      const receiptId = `RCPT-${csprngDigits(6)}`;
       const historyRecord = {
         id: voucherNo,
         voucherNo,
@@ -1455,11 +1482,11 @@ export const FleetProvider = ({ children }) => {
     // Create Archive Voucher
     const targetVehicle = vehicles.find(v => v.code === targetWO.vehicleCode);
     const targetBranch = branches.find(b => b.id === (targetVehicle?.branchId || 'BR-KID'));
-    const voucherNo = `VCH-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+    const voucherNo = `VCH-2026-${csprngDigits(5)}`;
 
     const newVoucher = {
       voucherNo,
-      receiptId: `RCPT-${Math.floor(100000 + Math.random() * 900000)}`,
+      receiptId: `RCPT-${csprngDigits(6)}`,
       workOrderNo: targetWO.id,
       date: new Date().toISOString().substring(0, 10),
       vehicleCode: targetWO.vehicleCode,
@@ -1513,9 +1540,9 @@ export const FleetProvider = ({ children }) => {
   const addLedgerEntry = (entryData) => {
     if (!checkPermission(['DIRECTOR', 'MAINTENANCE'], 'Record Expense Voucher')) return false;
 
-    const voucherNo = entryData.voucherNo?.trim() || `VCH-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-    const receiptId = entryData.receiptId?.trim() || `RCPT-${Math.floor(100000 + Math.random() * 900000)}`;
-    const workOrderNo = entryData.workOrderNo?.trim() || `WO-EXT-${Math.floor(100 + Math.random() * 900)}`;
+    const voucherNo = entryData.voucherNo?.trim() || `VCH-2026-${csprngDigits(5)}`;
+    const receiptId = entryData.receiptId?.trim() || `RCPT-${csprngDigits(6)}`;
+    const workOrderNo = entryData.workOrderNo?.trim() || `WO-EXT-${csprngDigits(3)}`;
 
     const targetVehicle = vehicles.find(v => v.code === entryData.vehicleCode);
     const targetBranch = branches.find(b => b.id === (entryData.branchId || targetVehicle?.branchId || 'BR-KID'));
@@ -1583,7 +1610,7 @@ export const FleetProvider = ({ children }) => {
     const targetBranch = branches.find(b => b.id === (reportData.branchId || targetVehicle?.branchId || 'BR-KID'));
 
     const newIncident = {
-      id: `INC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      id: `INC-${new Date().getFullYear()}-${csprngDigits(3)}`,
       vehicleCode: targetVehicle?.code || reportData.vehicleCode || 'N/A',
       plateNo: targetVehicle?.plateNo || reportData.plateNo || 'N/A',
       model: targetVehicle?.makeModel || reportData.model || 'Utility Vehicle',
@@ -1628,7 +1655,7 @@ export const FleetProvider = ({ children }) => {
   const addVehicle = (vehicleData) => {
     if (!checkPermission(['DIRECTOR'], 'Register New Asset')) return false;
 
-    const id = `VEH-${String(vehicles.length + 1).padStart(3, '0')}`;
+    const id = nextSequentialId('VEH-', 3, vehicles, 1);
     const branch = branches.find(b => b.id === vehicleData.branchId);
 
     const baseVehicle = {
@@ -1641,7 +1668,7 @@ export const FleetProvider = ({ children }) => {
       acquisitionCost: Number(vehicleData.acquisitionCost || 2000000),
       acquisitionDate: vehicleData.acquisitionDate || new Date().toISOString().substring(0, 10),
       supplier: vehicleData.supplier || 'Authorized Commercial Dealer',
-      orCrNo: vehicleData.orCrNo || `CR-${Math.floor(100000 + Math.random() * 900000)}-A`,
+      orCrNo: vehicleData.orCrNo || `CR-${csprngDigits(6)}-A`,
       assetTag: vehicleData.assetTag || `COTELCO-FA-${vehicleData.code}`,
       ownershipType: 'COTELCO Company Fleet (Pool Asset)',
       custodianDepartment: vehicleData.custodianDepartment || 'Operations & Maintenance Motor Pool',
@@ -1799,7 +1826,7 @@ export const FleetProvider = ({ children }) => {
     const today = new Date().toISOString().substring(0, 10);
     const isGrant = mode === 'grant' || (mode === 'toggle' && !exists);
     const historyEntry = {
-      id: `DH-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: `DH-${Date.now()}-${csprngDigits(3)}`,
       driverId: d?.id || driverId,
       driverName: d?.name || driverId,
       employeeId: d?.employeeId || 'EMP',
@@ -1864,7 +1891,7 @@ export const FleetProvider = ({ children }) => {
 
     const bookingWithId = {
       ...newBooking,
-      id: newBooking.id || `BK-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`,
+      id: newBooking.id || `BK-${new Date().getFullYear()}-${csprngDigits(5)}`,
       status: newBooking.status || 'Scheduled',
       createdByRole: newBooking.createdByRole || settings.currentRole,
       createdBy: newBooking.createdBy || (isMechActor ? settings.currentMechanic : 'Operations Director')
@@ -1993,11 +2020,11 @@ export const FleetProvider = ({ children }) => {
   const addDriver = (driverData) => {
     if (!checkPermission(['DIRECTOR', 'DISPATCHER'], 'Register Driver')) return false;
 
-    const id = driverData.id || `DRV-${String(drivers.length + 1).padStart(3, '0')}`;
+    const id = driverData.id || nextSequentialId('DRV-', 3, drivers, 1);
     const newDriver = {
       id,
       name: driverData.name?.trim() || 'New Operator',
-      employeeId: driverData.employeeId?.trim() || `EMP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      employeeId: driverData.employeeId?.trim() || `EMP-${new Date().getFullYear()}-${csprngDigits(3)}`,
       title: driverData.title?.trim() || driverData.role || 'Field Service Driver',
       role: driverData.title?.trim() || driverData.role || 'Field Service Driver',
       department: driverData.department?.trim() || 'Operations & Maintenance',
@@ -2195,7 +2222,7 @@ export const FleetProvider = ({ children }) => {
     if (!municipality) return null;
 
     const cleanCode = (branchData.code || municipality.substring(0, 3)).toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const id = `BR-${cleanCode}-${Math.floor(10 + Math.random() * 89)}`;
+    const id = `BR-${cleanCode}-${csprngDigits(2)}`;
 
     const newBranch = {
       id,
@@ -2266,7 +2293,7 @@ export const FleetProvider = ({ children }) => {
 
     const prefix = `TRIP-${new Date().getFullYear()}-`;
     const newTrip = {
-      id: `${prefix}${String(Date.now()).slice(-6)}${Math.floor(10 + Math.random() * 90)}`,
+      id: `${prefix}${String(Date.now()).slice(-6)}${csprngDigits(2)}`,
       vehicleId: vehicle.id,
       vehicleCode: vehicle.code,
       plateNo: vehicle.plateNo,

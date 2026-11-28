@@ -2,6 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useFleet } from '../../context/FleetContext';
 import { X, UserPlus, Phone, Building, Briefcase, Layers, Sliders } from 'lucide-react';
 
+const csprngDigits = (digits = 3) => {
+  const min = Math.pow(10, digits - 1);
+  const span = Math.pow(10, digits) - min;
+  const arr = new Uint32Array(1);
+  crypto.getRandomValues(arr);
+  return String(min + (arr[0] % span));
+};
+
 export const AddDriverModal = () => {
   const {
     modalType,
@@ -17,22 +25,22 @@ export const AddDriverModal = () => {
   const employeeClassifications = editables.employeeClassifications || ['Heavy Equipment', 'Light Commercial', 'Passenger / Emergency', 'Patrol Motorcycle'];
 
   const [name, setName] = useState('');
-  const [employeeId, setEmployeeId] = useState(`EMP-2026-${Math.floor(100 + Math.random() * 900)}`);
+  const [employeeId, setEmployeeId] = useState(() => `EMP-2026-${csprngDigits(3)}`);
   const [title, setTitle] = useState(jobTitles[0] || 'Senior Aerial Boom Operator');
   const [department, setDepartment] = useState(departments[0] || 'Technical / Engineering');
   const [category, setCategory] = useState(employeeClassifications[0] || 'Heavy Equipment');
   const [branchId, setBranchId] = useState(branches[0]?.id || 'BR-KID');
   const [phone, setPhone] = useState('0919-550-2211');
-  const [licenseNo, setLicenseNo] = useState(`L02-26-${Math.floor(100000 + Math.random() * 900000)}`);
+  const [licenseNo, setLicenseNo] = useState(() => `L02-26-${csprngDigits(6)}`);
   const [licenseType, setLicenseType] = useState('Professional (RC 1, 2)');
   const [licenseExpiry, setLicenseExpiry] = useState('2029-11-21');
 
   useEffect(() => {
     if (modalType === 'add-driver') {
       setName('');
-      setEmployeeId(`EMP-2026-${Math.floor(100 + Math.random() * 900)}`);
+      setEmployeeId(`EMP-2026-${csprngDigits(3)}`);
       setPhone('0919-550-2211');
-      setLicenseNo(`L02-26-${Math.floor(100000 + Math.random() * 900000)}`);
+      setLicenseNo(`L02-26-${csprngDigits(6)}`);
       setLicenseType('Professional (RC 1, 2)');
       setLicenseExpiry('2029-11-21');
       if (jobTitles.length > 0 && !jobTitles.includes(title)) setTitle(jobTitles[0]);

@@ -19,6 +19,14 @@ const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 const ALLOWED_PHOTO_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const ALLOWED_PHOTO_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
+const csprngDigits = (digits = 6) => {
+  const min = Math.pow(10, digits - 1);
+  const span = Math.pow(10, digits) - min;
+  const arr = new Uint32Array(1);
+  crypto.getRandomValues(arr);
+  return String(min + (arr[0] % span));
+};
+
 const isSafeVehicleImageUrl = (raw) => {
   const val = String(raw || '').trim();
   if (!val) return true;
@@ -170,11 +178,11 @@ export const AddVehicleModal = () => {
       registrationExpiryDate: registrationExpiryDate || '2027-03-15',
       acquisitionCost: Number(cost) || 2100000,
       supplier: supplier.trim() || 'Authorized Automotive Dealer',
-      orCrNo: orCrNo.trim() || `CR-${Math.floor(100000 + Math.random() * 900000)}-A`,
+      orCrNo: orCrNo.trim() || `CR-${csprngDigits(6)}-A`,
       assetTag: assetTag.trim() || `COTELCO-FA-${cleanCode}`,
       warrantyPolicy: warrantyPolicy.trim() || '3 Years / 100,000 km Fleet Assurance',
-      vin: vin.trim() || `VIN-${year}-${Math.floor(100000 + Math.random() * 900000)}`,
-      engineNo: engineNo.trim() || `ENG-${Math.floor(10000 + Math.random() * 90000)}`,
+      vin: vin.trim() || `VIN-${year}-${csprngDigits(6)}`,
+      engineNo: engineNo.trim() || `ENG-${csprngDigits(5)}`,
       fuelType: fuelType || 'Diesel',
       image: image || DEFAULT_VEHICLE_IMAGES[classification] || DEFAULT_VEHICLE_IMAGES.default,
       statusReason: 'Newly commissioned utility asset. Cleared intake safety check.',
