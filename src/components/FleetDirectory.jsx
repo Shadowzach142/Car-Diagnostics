@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import { useFleet } from '../context/FleetContext';
 import { getVehicleImage } from '../data/fleetData';
 import { parseVehicleAlert } from '../utils/formatters';
-import { computeVehicleHealthScore } from '../utils/healthScore';
 import {
   LayoutGrid,
   Table as TableIcon,
@@ -22,7 +21,6 @@ export const FleetDirectory = () => {
   const {
     vehicles,
     branches,
-    workOrders = [],
     setSelectedVehicle,
     setModalType,
     globalSearch,
@@ -72,8 +70,6 @@ export const FleetDirectory = () => {
     setSelectedVehicle(v);
     setModalType(modal);
   };
-
-  const healthTitle = (hs) => `Health Score: ${hs.score} / 100 — ${hs.gradeLabel}`;
 
   const toggleCardExpand = (id) => {
     setExpandedCards(prev => ({ ...prev, [id]: !prev[id] }));
@@ -153,17 +149,15 @@ export const FleetDirectory = () => {
                   <th>Date Bought</th>
                   <th className="col-num">Odometer</th>
                   <th>Status</th>
-                  <th>Health</th>
                   <th>Next Service</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={10}><div className="empty-state">No vehicles match your search or filters.</div></td></tr>
+                  <tr><td colSpan={9}><div className="empty-state">No vehicles match your search or filters.</div></td></tr>
                 ) : filtered.map(v => {
                   const parsed = parseVehicleAlert(v);
-                  const health = computeVehicleHealthScore(v, workOrders);
                   return (
                     <tr key={v.id}>
                       <td>
@@ -195,17 +189,6 @@ export const FleetDirectory = () => {
                       <td style={{ whiteSpace: 'nowrap', fontSize: '0.84rem' }}>{v.acquisitionDate || `${v.year}`}</td>
                       <td className="col-num">{v.odometerKm.toLocaleString()} km</td>
                       <td><span className={`badge ${statusBadge(v.status)}`}>{v.status}</span></td>
-                      <td>
-                        <button
-                          type="button"
-                          className={`badge ${health.badgeClass}`}
-                          style={{ cursor: 'pointer', border: 'none' }}
-                          title={healthTitle(health)}
-                          onClick={() => open(v, 'vehicle-detail')}
-                        >
-                          {health.score}
-                        </button>
-                      </td>
                       <td>
                         {v.urgentAlert ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -243,7 +226,6 @@ export const FleetDirectory = () => {
             )}
             {filtered.map(v => {
               const isExpanded = !!expandedCards[v.id];
-              const health = computeVehicleHealthScore(v, workOrders);
               return (
                 <article key={v.id} className="vehicle-card" style={{ padding: 0, overflow: 'hidden' }}>
                   {/* Vehicle Image Banner */}
@@ -265,15 +247,6 @@ export const FleetDirectory = () => {
                         {v.status}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      className={`badge ${health.badgeClass}`}
-                      style={{ position: 'absolute', top: '10px', left: '10px', cursor: 'pointer', border: 'none' }}
-                      title={healthTitle(health)}
-                      onClick={() => open(v, 'vehicle-detail')}
-                    >
-                      Health {health.score}
-                    </button>
                   </div>
 
                   {/* Clean Summary (Minimal Text) */}
