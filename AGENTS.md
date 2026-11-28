@@ -40,7 +40,9 @@ COTELCO/
     │   └── fleetData.js         # Seed data (DEFAULT_*), constants, relational helper functions
     ├── utils/
     │   ├── formatters.js        # Pure formatting/parsing helpers
-    │   └── driverHelpers.js     # Pure DRIVER-role helpers (availability, expiry state, km sums)
+    │   ├── driverHelpers.js     # Pure DRIVER-role helpers (availability, expiry state, km sums)
+    │   ├── vehicleHealth.js     # Shared diagnostic evaluator (evaluateDiagnostic, parseLocalYmd)
+    │   └── healthScore.js       # Derived Vehicle Health Score model (pure, never stored)
     └── components/
         ├── Sidebar.jsx, TopBar.jsx          # Navigation + header + mobile search (PAGE_META in TopBar)
         ├── Dashboard.jsx                    # tab: dashboard   (Operator command center / Mechanic 4-panel overview)
@@ -94,6 +96,13 @@ COTELCO/
 - Default COTELCO Departments: `Area`, `Technical / Engineering`, `OGM - Office of the General Manager`, `Institutional Services`, `Audit Department`, `Finance`, `Core Plan`, `CPRST`.
 - Departments can also be created directly from the **Add department** dashed box at the end of the **Employees** (`DriverRoster.jsx`) department grid via `addEditableItem('departments', ...)`.
 - Renaming an option in `EditablesConfig` automatically cascades the new name across existing employee, vehicle, diagnostic, or work order records in `FleetContext`.
+
+### Vehicle Health Score (`healthScore.js`)
+- **Derived, never stored**: `computeVehicleHealthScore(vehicle, workOrders)` in `src/utils/healthScore.js` is a pure function computed at render time — no `FleetContext` state, no localStorage migration, no SQL column (derive it in views later, e.g. from `dbo.*` joins).
+- **Weighted pillars**: diagnostics health 40% (mean of per-diagnostic `evaluateDiagnostic` bands in `vehicle.diagnostics[]`), PMS compliance 25% (`getPmsDetails`), repair burden 20% (last-365-day work orders via `wo.vehicleCode === vehicle.code`, classification-normalized), paperwork validity 15% (insurance/LTO expiry), minus status penalty (IN-SHOP −10, OFFLINE −20, `urgentAlert` −10).
+- **Grades**: ≥85 EXCELLENT, 70–84 GOOD, 55–69 FAIR, 40–54 POOR, <40 CRITICAL → `badge-success` / `badge-warning` / `badge-danger`.
+- **Shared evaluator**: `evaluateDiagnostic` + `parseLocalYmd` live in `src/utils/vehicleHealth.js` and are imported by both `OngoingHealth.jsx` and `healthScore.js` — keep one copy.
+- **UI surfaces**: Car Profiling (card header pill + table column), Dashboard (5th "Fleet health" KPI via `.kpi-grid-5` + score badge in Alerts & Health rows), VehicleDetailModal Overview tab (score box with breakdown + top 3 factors). Clicking a Car Profiling score pill opens the `vehicle-detail` modal.
 
 ### Key Page Workflows
 - **Operator & Mechanic Dashboards (`Dashboard.jsx`)**:

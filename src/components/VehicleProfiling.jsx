@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useFleet } from '../context/FleetContext';
 import { getVehicleImage, getVehicleAuthorizedDrivers } from '../data/fleetData';
+import { computeVehicleHealthScore } from '../utils/healthScore';
 import {
   Car,
   Plus,
@@ -279,6 +280,7 @@ export const VehicleProfiling = () => {
               const img = getVehicleImage(v);
               const insState = getValidityState(v.insuranceExpiryDate);
               const regState = getValidityState(v.registrationExpiryDate);
+              const health = computeVehicleHealthScore(v, workOrders);
               const specText =
                 v.specs?.reach && !v.specs.reach.startsWith('N/A')
                   ? v.specs.reach
@@ -334,6 +336,18 @@ export const VehicleProfiling = () => {
                           >
                             {v.year}
                           </span>
+                          <button
+                            type="button"
+                            className={`badge ${health.badgeClass}`}
+                            style={{ cursor: 'pointer', border: 'none', fontSize: '0.66rem', padding: '1px 7px' }}
+                            title={`Health Score: ${health.score} / 100 — ${health.gradeLabel}`}
+                            onClick={() => {
+                              setSelectedVehicle(v);
+                              setModalType('vehicle-detail');
+                            }}
+                          >
+                            Health {health.score}
+                          </button>
                         </div>
                         <div
                           style={{
@@ -586,6 +600,7 @@ export const VehicleProfiling = () => {
                     <th>Authorized</th>
                     <th>Insurance</th>
                     <th>LTO Reg</th>
+                    <th>Health</th>
                     <th className="num">Action</th>
                   </tr>
                 </thead>
@@ -596,6 +611,7 @@ export const VehicleProfiling = () => {
                     const img = getVehicleImage(v);
                     const insState = getValidityState(v.insuranceExpiryDate);
                     const regState = getValidityState(v.registrationExpiryDate);
+                    const health = computeVehicleHealthScore(v, workOrders);
 
                     return (
                       <tr key={v.id}>
@@ -637,6 +653,20 @@ export const VehicleProfiling = () => {
                         </td>
                         <td><ValidityPill state={insState} /></td>
                         <td><ValidityPill state={regState} /></td>
+                        <td>
+                          <button
+                            type="button"
+                            className={`badge ${health.badgeClass}`}
+                            style={{ cursor: 'pointer', border: 'none' }}
+                            title={`Health Score: ${health.score} / 100 — ${health.gradeLabel}`}
+                            onClick={() => {
+                              setSelectedVehicle(v);
+                              setModalType('vehicle-detail');
+                            }}
+                          >
+                            {health.score}
+                          </button>
+                        </td>
                         <td className="num">
                           <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
                             <button

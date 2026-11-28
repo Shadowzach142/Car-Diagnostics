@@ -852,6 +852,7 @@ ul { list-style: none; }
 .dash-actions-right { display: flex; gap: 0.6rem; }
 
 .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.9rem; }
+.kpi-grid-5 { grid-template-columns: repeat(5, 1fr); }
 
 .kpi-card {
   display: flex;
@@ -2315,6 +2316,7 @@ html.high-contrast .calendar-title-text {
    ========================================================================== */
 @media (max-width: 1180px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .kpi-grid-5 { grid-template-columns: repeat(3, 1fr); }
   .topbar-quick-pill span { display: none; }
   .profile-text-cluster { display: none; }
   .topbar-page-subtitle { display: none; }
@@ -2323,6 +2325,7 @@ html.high-contrast .calendar-title-text {
 @media (max-width: 960px) {
   .dashboard-single-screen { height: auto; }
   .dash-grid { grid-template-columns: 1fr; grid-template-rows: none; }
+  .kpi-grid-5 { grid-template-columns: repeat(2, 1fr); }
   .dash-panel.span-2 { grid-row: auto; max-height: 420px; }
   .dash-panel { min-height: 260px; }
   .map-layout { grid-template-columns: 1fr; }

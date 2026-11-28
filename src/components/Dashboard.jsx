@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useFleet } from '../context/FleetContext';
 import { getVehicleImage, WORK_ORDER_STAGES } from '../data/fleetData';
 import { parseVehicleAlert } from '../utils/formatters';
+import { computeVehicleHealthScore } from '../utils/healthScore';
 import {
   Truck,
   CheckCircle2,
@@ -596,6 +597,16 @@ export const Dashboard = () => {
   const offline = count('OFFLINE');
   const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
 
+  // Derived fleet health average (pure scoring model, never stored)
+  const vehicleScores = vehicles.map(v => computeVehicleHealthScore(v, workOrders));
+  const fleetHealthAvg = vehicleScores.length
+    ? Math.round(vehicleScores.reduce((sum, s) => sum + s.score, 0) / vehicleScores.length)
+    : 0;
+  const fleetHealthTone = fleetHealthAvg >= 80 ? 'ok' : fleetHealthAvg >= 60 ? 'warn' : 'bad';
+  const fleetHealthNote = vehicleScores.length
+    ? `${vehicleScores.filter(s => s.score >= 70).length} of ${total} vehicles in good condition`
+    : 'No vehicles registered';
+
   const activeWorkOrders = workOrders.filter(w => w.status !== COMPLETED);
   const completedWorkOrders = workOrders.filter(w => w.status === COMPLETED);
   const departments = editables.departments || [];
@@ -792,7 +803,7 @@ export const Dashboard = () => {
         </div>
       </div>
 
-      <div className="kpi-grid">
+      <div className="kpi-grid kpi-grid-5">
         <Kpi
           icon={Activity}
           tone={overdueHealthCount > 0 ? 'bad' : dueSoonHealthCount > 0 ? 'warn' : 'ok'}
@@ -846,6 +857,14 @@ export const Dashboard = () => {
           onClick={() => {
             setLeftTab('expiry');
           }}
+        />
+        <Kpi
+          icon={Activity}
+          tone={fleetHealthTone}
+          label="Fleet health"
+          value={fleetHealthAvg}
+          note={fleetHealthNote}
+          onClick={() => setActiveTab('health')}
         />
       </div>
 
@@ -925,6 +944,7 @@ export const Dashboard = () => {
                 const healthInfo = vehicleHealthMap[v.id];
                 const diag = healthInfo?.primaryAlertDiag;
                 const activeWo = activeWorkOrders.find(w => w.vehicleCode === v.code);
+                const health = computeVehicleHealthScore(v, workOrders);
 
                 let headline = parsed.issueText;
                 let subline = `${branch?.municipality || 'Assigned Branch'} · ${(v.odometerKm || 0).toLocaleString()} km`;
@@ -996,6 +1016,14 @@ export const Dashboard = () => {
 
                     <span className={`badge ${badgeClass}`} style={{ whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                       {badgeText}
+                    </span>
+
+                    <span
+                      className={`badge ${health.badgeClass}`}
+                      style={{ whiteSpace: 'nowrap', fontSize: '0.75rem', flexShrink: 0 }}
+                      title={`Health Score: ${health.score} / 100 — ${health.gradeLabel}`}
+                    >
+                      Health {health.score}
                     </span>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}>
