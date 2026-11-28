@@ -126,7 +126,13 @@ export const FleetProvider = ({ children }) => {
 
   const [branches, setBranches] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.BRANCHES);
-    return saved ? JSON.parse(saved) : DEFAULT_BRANCHES;
+    if (!saved) return DEFAULT_BRANCHES;
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : DEFAULT_BRANCHES;
+    } catch {
+      return DEFAULT_BRANCHES;
+    }
   });
 
   const [vehicles, setVehicles] = useState(() => {
@@ -184,17 +190,35 @@ export const FleetProvider = ({ children }) => {
 
   const [repairArchive, setRepairArchive] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.REPAIRS);
-    return saved ? JSON.parse(saved) : DEFAULT_REPAIR_ARCHIVE;
+    if (!saved) return DEFAULT_REPAIR_ARCHIVE;
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : DEFAULT_REPAIR_ARCHIVE;
+    } catch {
+      return DEFAULT_REPAIR_ARCHIVE;
+    }
   });
 
   const [auditLogs, setAuditLogs] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
-    return saved ? JSON.parse(saved) : DEFAULT_AUDIT_LOGS;
+    if (!saved) return DEFAULT_AUDIT_LOGS;
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : DEFAULT_AUDIT_LOGS;
+    } catch {
+      return DEFAULT_AUDIT_LOGS;
+    }
   });
 
   const [bookings, setBookings] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.BOOKINGS);
-    return saved ? JSON.parse(saved) : DEFAULT_BOOKINGS;
+    if (!saved) return DEFAULT_BOOKINGS;
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : DEFAULT_BOOKINGS;
+    } catch {
+      return DEFAULT_BOOKINGS;
+    }
   });
 
   const [drivers, setDrivers] = useState(() => {
@@ -253,7 +277,17 @@ export const FleetProvider = ({ children }) => {
 
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    const parsed = saved ? JSON.parse(saved) : {};
+    let parsed = {};
+    if (saved) {
+      try {
+        const raw = JSON.parse(saved);
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+          parsed = raw;
+        }
+      } catch {
+        parsed = {};
+      }
+    }
     const validRole = ['MECHANIC', 'DRIVER'].includes(parsed.currentRole) ? parsed.currentRole : 'DIRECTOR';
     return {
       seniorMode: false,
