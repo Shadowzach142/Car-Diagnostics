@@ -15,6 +15,24 @@ import {
   Truck
 } from 'lucide-react';
 
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
+const ALLOWED_PHOTO_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const ALLOWED_PHOTO_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+
+const isSafeVehicleImageUrl = (raw) => {
+  const val = String(raw || '').trim();
+  if (!val) return true;
+  if (val.startsWith('/vehicles/') && !val.includes('..') && !val.startsWith('//')) {
+    return /^\/vehicles\/[a-zA-Z0-9._/-]+\.(jpg|jpeg|png|webp)$/i.test(val);
+  }
+  try {
+    const parsed = new URL(val);
+    return parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 export const AddVehicleModal = () => {
   const {
     modalType,
@@ -65,6 +83,7 @@ export const AddVehicleModal = () => {
   const [warrantyPolicy, setWarrantyPolicy] = useState('3 Years / 100,000 km Fleet Assurance');
   const [image, setImage] = useState(DEFAULT_VEHICLE_IMAGES['Pickup']);
   const [imageUrlInput, setImageUrlInput] = useState('');
+  const [imageError, setImageError] = useState('');
 
   useEffect(() => {
     if (modalType === 'add-vehicle') {
@@ -84,6 +103,7 @@ export const AddVehicleModal = () => {
       setFuelType('Diesel');
       setImage(DEFAULT_VEHICLE_IMAGES[defaultClass] || DEFAULT_VEHICLE_IMAGES['Pickup']);
       setImageUrlInput('');
+      setImageError('');
     }
   }, [modalType, vehicleClassifications, branches, custodianDepartments]);
 
@@ -93,12 +113,30 @@ export const AddVehicleModal = () => {
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
+      const fileNameLower = String(file.name || '').toLowerCase();
+      const dotIdx = fileNameLower.lastIndexOf('.');
+      const ext = dotIdx >= 0 ? fileNameLower.slice(dotIdx) : '';
+      const mime = String(file.type || '').toLowerCase();
+
+      if (!ALLOWED_PHOTO_EXTS.has(ext) || !ALLOWED_PHOTO_MIMES.has(mime)) {
+        setImageError('Invalid image format. Allowed: .jpg, .jpeg, .png, or .webp.');
+        e.target.value = '';
+        return;
+      }
+      if (file.size > MAX_PHOTO_BYTES) {
+        setImageError('Image exceeds 2 MB limit. Please choose a file under 2 MB.');
+        e.target.value = '';
+        return;
+      }
+
+      setImageError('');
       const reader = new FileReader();
       reader.onload = (event) => {
         setImage(event.target?.result);
       };
       reader.readAsDataURL(file);
     }
+    e.target.value = '';
   };
 
   // Change default image when classification changes if no custom image was set
@@ -111,6 +149,10 @@ export const AddVehicleModal = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (imageUrlInput.trim() && !isSafeVehicleImageUrl(imageUrlInput)) {
+      setImageError('Only https:// URLs or /vehicles/... paths are allowed.');
+      return;
+    }
     const cleanCode = code.trim().toUpperCase();
     const newVeh = addVehicle({
       code: cleanCode,
@@ -217,12 +259,12 @@ export const AddVehicleModal = () => {
 
                 {/* Upload & URL Controls */}
                 <div style={{ flex: 1, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer', margin: 0 }}>
                       <Upload size={14} /> Upload photo
                       <input
                         type="file"
-                        accept="image/*"
+                        accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                         onChange={handleFileUpload}
                         style={{ display: 'none' }}
                       />
@@ -232,23 +274,45 @@ export const AddVehicleModal = () => {
                       <button
                         type="button"
                         className="btn btn-sm btn-outline"
-                        onClick={() => setImage('')}
+                        onClick={() => {
+                          setImage('');
+                          setImageUrlInput('');
+                          setImageError('');
+                        }}
                         style={{ color: 'var(--bad-text)' }}
                       >
                         Remove
                       </button>
                     )}
+
+                    <span style={{ fontSize: '0.72rem', color: imageError ? 'var(--bad-text)' : 'var(--text-muted)', fontWeight: imageError ? 600 : 400 }}>
+                      {imageError || 'JPG, PNG, WEBP (max 2 MB)'}
+                    </span>
                   </div>
 
                   <input
-                    type="url"
+                    type="text"
                     className="form-input"
-                    style={{ minHeight: '34px', fontSize: '0.8rem' }}
-                    placeholder="Or paste image web link..."
+                    style={{
+                      minHeight: '34px',
+                      fontSize: '0.8rem',
+                      ...(imageError && imageUrlInput.trim() ? { borderColor: '#DC2626' } : {})
+                    }}
+                    placeholder="Or paste https:// image link or /vehicles/... path"
                     value={imageUrlInput}
                     onChange={(e) => {
-                      setImageUrlInput(e.target.value);
-                      if (e.target.value) setImage(e.target.value);
+                      const val = e.target.value;
+                      setImageUrlInput(val);
+                      const trimmed = val.trim();
+                      if (!trimmed) {
+                        setImageError('');
+                        setImage(DEFAULT_VEHICLE_IMAGES[classification] || DEFAULT_VEHICLE_IMAGES.default);
+                      } else if (isSafeVehicleImageUrl(trimmed)) {
+                        setImageError('');
+                        setImage(trimmed);
+                      } else {
+                        setImageError('Only https:// URLs or /vehicles/... paths are allowed.');
+                      }
                     }}
                   />
                 </div>

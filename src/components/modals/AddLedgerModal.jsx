@@ -2,6 +2,15 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useFleet } from '../../context/FleetContext';
 import { X, FileText, Upload, ScanText, Trash2 } from 'lucide-react';
 
+const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf'
+]);
+const ALLOWED_ATTACHMENT_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.pdf']);
+
 function formatFileSize(bytes) {
   if (!bytes || Number.isNaN(bytes)) return '';
   if (bytes < 1024) return `${bytes} B`;
@@ -58,6 +67,7 @@ export const AddLedgerModal = () => {
   const [attachedFile, setAttachedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [ocrStatus, setOcrStatus] = useState('');
+  const [fileError, setFileError] = useState('');
   const receiptInputRef = useRef(null);
 
   useEffect(() => {
@@ -79,7 +89,22 @@ export const AddLedgerModal = () => {
   const handleFilePicked = (file) => {
     if (!file) return;
     setOcrStatus('');
-    const isImage = (file.type || '').startsWith('image/');
+    const fileNameLower = String(file.name || '').toLowerCase();
+    const dotIdx = fileNameLower.lastIndexOf('.');
+    const ext = dotIdx >= 0 ? fileNameLower.slice(dotIdx) : '';
+    const mime = String(file.type || '').toLowerCase();
+
+    if (!ALLOWED_ATTACHMENT_EXTS.has(ext) || !ALLOWED_ATTACHMENT_MIMES.has(mime)) {
+      setFileError('Invalid file type. Allowed: .jpg, .jpeg, .png, .webp, or .pdf.');
+      return;
+    }
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      setFileError('File exceeds 2 MB limit. Please choose a file under 2 MB.');
+      return;
+    }
+
+    setFileError('');
+    const isImage = mime.startsWith('image/');
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result;
@@ -208,6 +233,7 @@ export const AddLedgerModal = () => {
       setReceiptImage(null);
       setAttachedFile(null);
       setOcrStatus('');
+      setFileError('');
       setModalType(null);
     }
   };
@@ -259,7 +285,7 @@ export const AddLedgerModal = () => {
               <input
                 ref={receiptInputRef}
                 type="file"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,image/*"
+                accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
                 onChange={handleReceiptPhotoChange}
                 style={{ display: 'none' }}
               />
@@ -281,7 +307,7 @@ export const AddLedgerModal = () => {
                     width: '100%',
                     padding: '0.9rem 1rem',
                     borderRadius: '8px',
-                    border: isDragging ? '1.5px dashed #84CC16' : '1px dashed var(--border-medium)',
+                    border: fileError ? '1.5px dashed #DC2626' : isDragging ? '1.5px dashed #84CC16' : '1px dashed var(--border-medium)',
                     background: isDragging ? '#F7FDE8' : 'var(--bg-surface-subtle)',
                     color: 'var(--text-secondary)',
                     fontSize: '0.82rem',
@@ -297,8 +323,8 @@ export const AddLedgerModal = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 600, color: 'var(--text-main)' }}>
                     <Upload size={15} /> Drag &amp; drop a file here, or click to browse
                   </div>
-                  <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>
-                    Word (.docx, .doc), PDF (.pdf), Excel, text, or photo
+                  <div style={{ fontSize: '0.73rem', color: fileError ? 'var(--bad-text)' : 'var(--text-muted)', fontWeight: fileError ? 600 : 400 }}>
+                    {fileError || 'PDF (.pdf) or photo (.jpg, .jpeg, .png, .webp) · Max 2 MB'}
                   </div>
                 </div>
               ) : (

@@ -26,6 +26,10 @@ import {
   ArrowLeft
 } from 'lucide-react';
 
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
+const ALLOWED_PHOTO_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const ALLOWED_PHOTO_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+
 const getCurrentMonthKey = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -135,6 +139,7 @@ export const VehicleDetailModal = () => {
   const [selectedArchiveMonth, setSelectedArchiveMonth] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formState, setFormState] = useState({});
+  const [photoError, setPhotoError] = useState('');
   const photoInputRef = useRef(null);
   const currentMonthKey = useMemo(() => getCurrentMonthKey(), []);
 
@@ -176,6 +181,7 @@ export const VehicleDetailModal = () => {
         dielectricRating: specs.dielectricRating || 'Standard Commercial'
       });
       setIsEditing(false);
+      setPhotoError('');
       setActiveProfileTab('overview');
       setSelectedArchiveMonth(null);
     }
@@ -450,6 +456,23 @@ export const VehicleDetailModal = () => {
     if (isReadOnly) return;
     const file = e.target.files?.[0];
     if (!file) return;
+    const fileNameLower = String(file.name || '').toLowerCase();
+    const dotIdx = fileNameLower.lastIndexOf('.');
+    const ext = dotIdx >= 0 ? fileNameLower.slice(dotIdx) : '';
+    const mime = String(file.type || '').toLowerCase();
+
+    if (!ALLOWED_PHOTO_EXTS.has(ext) || !ALLOWED_PHOTO_MIMES.has(mime)) {
+      setPhotoError('Invalid format (.jpg, .png, .webp only)');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoError('Photo exceeds 2 MB limit');
+      e.target.value = '';
+      return;
+    }
+
+    setPhotoError('');
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result;
@@ -607,13 +630,14 @@ export const VehicleDetailModal = () => {
                     <input
                       ref={photoInputRef}
                       type="file"
-                      accept="image/*"
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                       onChange={handlePhotoUpload}
                       style={{ display: 'none' }}
                     />
                     <button
                       type="button"
                       onClick={() => photoInputRef.current?.click()}
+                      title={photoError || 'Upload JPG, PNG, or WEBP photo (max 2 MB)'}
                       style={{
                         position: 'absolute',
                         left: '4px',
@@ -625,8 +649,8 @@ export const VehicleDetailModal = () => {
                         gap: '0.25rem',
                         padding: '0.2rem 0.35rem',
                         borderRadius: '7px',
-                        border: '1px solid rgba(255,255,255,0.22)',
-                        background: 'rgba(15, 23, 42, 0.78)',
+                        border: photoError ? '1px solid #FCA5A5' : '1px solid rgba(255,255,255,0.22)',
+                        background: photoError ? 'rgba(185, 28, 28, 0.92)' : 'rgba(15, 23, 42, 0.78)',
                         color: '#FFFFFF',
                         fontSize: '0.64rem',
                         fontWeight: 700,
@@ -634,7 +658,7 @@ export const VehicleDetailModal = () => {
                         backdropFilter: 'blur(4px)'
                       }}
                     >
-                      <Camera size={11} /> Change Photo
+                      <Camera size={11} /> {photoError ? 'Max 2MB JPG/PNG/WEBP' : 'Change Photo'}
                     </button>
                   </>
                 )}
